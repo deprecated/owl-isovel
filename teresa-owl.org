@@ -1,0 +1,188 @@
+#+OPTIONS: ':nil *:t -:t ::t <:t H:3 \n:nil ^:{} arch:headline
+#+OPTIONS: author:t c:nil creator:nil d:(not "LOGBOOK") date:t e:t
+#+OPTIONS: email:nil f:t inline:t num:t p:nil pri:nil prop:nil stat:t
+#+OPTIONS: tags:t tasks:t tex:t timestamp:t title:t toc:t todo:t |:t
+#+TITLE: teresa-owl
+#+AUTHOR: William Henney
+#+LANGUAGE: en
+#+SELECT_TAGS: export
+#+EXCLUDE_TAGS: noexport
+
+
+* Making velocity maps from Teresa's Owl data
+** Plan of action
+*** First deal with the image + slit
++ Make a nice median image
+  + First resample onto a common spatial grid
+  + Rescale each image to equalise the exposures
+    + See [[file:owl-all-radec-images.bck]]
+  + Take a median of each pisel, which should remove the slit parts
+  + Then divide each image by the median image to get the slit profile
+* Utility functions
+#+BEGIN_SRC python :tangle owl_utils.py
+DATADIR = '/Users/will/Dropbox/Papers/LL-Objects/NGC3587'
+#+END_SRC
+
+* Make the median image
+** Get info on the images
++ Run this on the files loaded from [[file:owl-all-radec-images.bck]]
+#+BEGIN_SRC sh :results verbatim
+  for i in $(seq 12); do
+      #echo $i
+      xpaget ds9 file
+      xpaget ds9 scale limits
+      xpaset -p ds9 frame next
+  done
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm212_ardec.fits
+0 100
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm208_ardec.fits
+0 50
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm205_ardec.fits
+0 50
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm202_ardec.fits
+0 50
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm198_ardec.fits
+0 60
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm057_ardec.fits
+0 200
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm313_ardec.fits
+0 100
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm054_ardec.fits
+0 200
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm317_ardec.fits
+0 100
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm320_ardec.fits
+0 100
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm323_ardec.fits
+0 100
+/Users/will/Dropbox/Papers/LL-Objects/NGC3587/posiciones/spm338_ardec.fits
+0 100
+#+end_example
+** Table of image info
+:PROPERTIES:
+:TABLE_EXPORT_FILE: list-of-images.tab
+:TABLE_EXPORT_FORMAT: orgtbl-to-tsv
+:END:
++ Export with =C-c t e=
++ Should get exported to [[file:list-of-images.tab]]
++ The =bias= and =core= columns are median values that were measured with ds9 using large boxes
+#+name: list-of-images
+| index | filename                     |  bias |  core |
+|-------+------------------------------+-------+-------|
+| pos01 | posiciones/spm212_ardec.fits |     4 | 42.55 |
+| pos02 | posiciones/spm208_ardec.fits |  3.11 | 25.44 |
+| pos03 | posiciones/spm205_ardec.fits |  2.54 |    24 |
+| pos04 | posiciones/spm202_ardec.fits |  1.77 | 26.55 |
+| pos05 | posiciones/spm198_ardec.fits |  4.66 | 33.66 |
+| pos06 | posiciones/spm057_ardec.fits |  4.75 | 90.25 |
+| pos07 | posiciones/spm313_ardec.fits | -3.44 | 46.11 |
+| pos08 | posiciones/spm054_ardec.fits |  5.75 | 92.75 |
+| pos09 | posiciones/spm317_ardec.fits | -1.55 | 47.11 |
+| pos10 | posiciones/spm320_ardec.fits | -0.66 | 47.77 |
+| pos11 | posiciones/spm323_ardec.fits | -1.33 | 47.44 |
+| pos12 | posiciones/spm338_ardec.fits | -1.77 | 45.44 |
+** Set up the output grid and resample and normalize each image
++ Use 0.5 arcsec pixels
++ Central star position:
+  + 11:14:47.699 +55:01:09.86
+  + 168.6985 55.019408 in degrees
++ Diameter is about 4 arcmin = 240 arcsec
++ So a 512 x 512 grid should be enough
+
+#+BEGIN_SRC python :eval no :tangle regrid_images.py
+  import numpy as np
+  from scipy.interpolate import griddata
+  from astropy.io import fits
+  from astropy.wcs import WCS
+  from astropy.table import Table
+  from owl_utils import DATADIR
+
+  #
+  # First set up WCS for the output image
+  # We use capital letters for the output variables
+  #
+
+  NX, NY = 512, 512
+  # 0.5 arcsec pixels
+  dRA, dDec = -0.5/3600., 0.5/3600.
+  # Center on central star of NGC 3587
+  RA0, Dec0 = 168.6985, 55.019408
+  W = WCS(naxis=2)
+  W.wcs.cdelt = [dRA, dDec]
+  W.wcs.crpix = [0.5*(1 + NX), 0.5*(1 + NY)]
+  W.wcs.crval = [RA0, Dec0]
+  W.wcs.ctype = ['RA---TAN', 'DEC--TAN']
+
+  outimage = np.zeros((NY, NX))
+  # Create world coord arrays for output image
+  II, JJ = np.meshgrid(np.arange(NX), np.arange(NY))
+  RA, Dec = W.all_pix2world(II, JJ, 0)
+
+  #
+  # Read in the list of slits
+  #
+  table = Table.read('list-of-images.tab', format='ascii.tab')
+
+  for row in table:
+      hdu, = fits.open(DATADIR +'/' + row['filename'])
+      image = (hdu.data - row['bias']) / (row['core'] - row['bias'])
+      outfilename = 'imslit-{}.fits'.format(row['index'])
+      ny, nx = image.shape
+      hdu.header.remove('@EPOCH')
+      w = WCS(hdu.header)
+      # Create world coord arrays for output image
+      ii, jj = np.meshgrid(np.arange(nx), np.arange(ny))
+      ra, dec = w.all_pix2world(ii, jj, 0)
+      # Do the interpolation
+      points = np.array(zip(ra.ravel(), dec.ravel()))
+      xi = np.array(zip(RA.ravel(), Dec.ravel()))
+      outimage = griddata(points, image.ravel(), xi, method='nearest').reshape((NY, NX))
+      # Save the output image
+      fits.PrimaryHDU(header=W.to_header(), data=outimage).writeto(outfilename, clobber=True)
+  
+  
+  
+#+END_SRC
+
+
+#+BEGIN_SRC sh :results verbatim
+time python regrid_images.py 2>&1
+#+END_SRC
+
+#+RESULTS:
+: WARNING: FITSFixedWarning: RADECSYS= 'FK5 ' 
+: RADECSYS is non-standard, use RADESYSa. [astropy.wcs.wcs]
+** Take median of all the images and divide each one by it
+#+BEGIN_SRC python :eval no :tangle medianize_images.py
+  import numpy as np
+  from astropy.io import fits
+
+  NIM = 12
+  imlist = []
+  fnlist = []
+  for i in range(1, NIM+1):
+      fitsname = 'imslit-pos{:02d}.fits'.format(i)
+      hdu, = fits.open(fitsname)
+      imlist.append(hdu.data)
+      fnlist.append(fitsname)
+  imstack = np.dstack(imlist)
+  median = np.median(imstack, axis=-1)
+  fits.PrimaryHDU(header=hdu.header,
+                  data=median).writeto('imslit-median.fits', clobber=True)
+
+  for im, fn in zip(imlist, fnlist):
+      outname = fn.replace('imslit', 'inslit-ratio')
+      fits.PrimaryHDU(header=hdu.header,
+                      data=im/median).writeto(outname, clobber=True)
+#+END_SRC
+
+#+BEGIN_SRC sh :results verbatim
+time python medianize_images.py
+#+END_SRC
+
+#+RESULTS:
+
