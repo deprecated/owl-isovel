@@ -19,11 +19,17 @@
   + Take a median of each pisel, which should remove the slit parts
   + Then divide each image by the median image to get the slit profile
 * Utility functions
+:PROPERTIES:
+:header-args: :tangle owl_utils.py
+:END:
+
+
 #+BEGIN_SRC python :tangle owl_utils.py
 DATADIR = '/Users/will/Dropbox/Papers/LL-Objects/NGC3587'
 #+END_SRC
 
-* Make the median image
+* DONE Make the median image
+CLOSED: [2016-06-17 Fri 19:36]
 ** Get info on the images
 + Run this on the files loaded from [[file:owl-all-radec-images.bck]]
 #+BEGIN_SRC sh :results verbatim
@@ -85,6 +91,7 @@ DATADIR = '/Users/will/Dropbox/Papers/LL-Objects/NGC3587'
 | pos10 | posiciones/spm320_ardec.fits | -0.66 | 47.77 |
 | pos11 | posiciones/spm323_ardec.fits | -1.33 | 47.44 |
 | pos12 | posiciones/spm338_ardec.fits | -1.77 | 45.44 |
+
 ** Set up the output grid and resample and normalize each image
 + Use 0.5 arcsec pixels
 + Central star position:
@@ -185,4 +192,66 @@ time python medianize_images.py
 #+END_SRC
 
 #+RESULTS:
+* Generate the PV images
+** Put the slits on the sky
+** More tables
 
+*** [N II] spectra
+:PROPERTIES:
+:TABLE_EXPORT_FILE: spectra-nii.tab
+:TABLE_EXPORT_FORMAT: orgtbl-to-tsv
+:END:
+|          |      RA |     Dec |  helio |  NX |  NY | xpixscale | jcenter | file                 |
+|----------+---------+---------+--------+-----+-----+-----------+---------+----------------------|
+| north988 |  2.8104 |  98.784 |  -2.63 | 625 | 300 |      0.53 |     382 | spec213-nii.fits     |
+| north809 |  2.7384 |  80.892 |  -2.61 | 625 | 300 |     0.531 |     382 | spec209-nii.fits     |
+| north612 |  2.6688 |    61.2 |  -2.59 | 625 | 300 |     0.528 |     382 | spec206-nii.fits     |
+| north413 |  2.5464 |  41.364 |  -2.56 | 625 | 300 |     0.532 |     382 | spec203-nii.fits     |
+| north195 |  1.7424 |  19.584 |   -2.5 | 300 | 625 |     0.529 |     382 | spec199-nii.fits     |
+| south061 | -0.3984 |  -0.612 | -19.65 | 512 | 300 |     0.637 |     300 | spec058-nii-rot.fits |
+| south177 |  0.1128 | -17.748 |  -2.85 | 625 | 300 |     0.522 |     382 | spec314-nii.fits     |
+| south380 | -0.4344 | -38.016 | -19.62 | 512 | 300 |     0.619 |     299 | spec055-nii-rot.fits |
+| south504 |     0.3 | -50.436 |  -2.88 | 625 | 300 |     0.527 |     382 | spec318-nii.fits     |
+| south662 |  0.2184 |  -66.24 |   -2.9 | 625 | 300 |     0.525 |     382 | spec321-nii.fits     |
+| south821 |    0.36 | -82.152 |  -2.93 | 625 | 300 |     0.525 |     382 | spec324-nii.fits     |
+| south942 |  0.1824 | -94.176 |  -2.96 | 625 | 300 |     0.525 |     382 | spec339-nii.fits     |
+
++ Imported from [[file:~/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/star-nii.csv]]
++ Constant columns removed:
+  + lamrest :: 6583.45
+  + lam0 :: 6578
+  + lamscale :: 0.043889666
+  + d vel :: 2
++ Some things fixed
+  + The wrong files were indicated as "rot" or not
+  + It should just be the 055 and 058 ones
+  + And not the 199 one
+  + Teresa seems to have already fixed that in the rotated version
+
+
+
+*** H\alpha spectra
+:PROPERTIES:
+:TABLE_EXPORT_FILE: spectra-ha.tab
+:TABLE_EXPORT_FORMAT: orgtbl-to-tsv
+:END:
+|          |      RA |     Dec |  helio |  NX |  NY | xpixscale | jcenter | file                |
+|----------+---------+---------+--------+-----+-----+-----------+---------+---------------------|
+| north988 |  2.8104 |  98.784 |  -2.63 | 625 | 300 |      0.53 |     382 | spec213-ha.fits     |
+| north809 |  2.7384 |  80.892 |  -2.61 | 625 | 300 |     0.531 |     382 | spec209-ha.fits     |
+| north612 |  2.6688 |    61.2 |  -2.59 | 625 | 300 |     0.528 |     382 | spec206-ha.fits     |
+| north413 |  2.5464 |  41.364 |  -2.56 | 625 | 300 |     0.532 |     382 | spec203-ha.fits     |
+| north195 |  1.7424 |  19.584 |   -2.5 | 625 | 300 |     0.529 |     382 | spec199-ha.fits     |
+| south061 | -0.3984 |  -0.612 | -19.65 | 512 | 300 |     0.637 |     300 | spec058-ha-rot.fits |
+| south177 |  0.1128 | -17.748 |  -2.85 | 625 | 300 |     0.522 |     382 | spec314-ha.fits     |
+| south380 | -0.4344 | -38.016 | -19.62 | 512 | 300 |     0.619 |     299 | spec055-ha-rot.fits |
+| south504 |     0.3 | -50.436 |  -2.88 | 625 | 300 |     0.527 |     382 | spec318-ha.fits     |
+| south662 |  0.2184 |  -66.24 |   -2.9 | 625 | 300 |     0.525 |     382 | spec321-ha.fits     |
+| south821 |    0.36 | -82.152 |  -2.93 | 625 | 300 |     0.525 |     382 | spec324-ha.fits     |
+| south942 |  0.1824 | -94.176 |  -2.96 | 625 | 300 |     0.525 |     382 | spec339-ha.fits     |
+
++ Constant columns removed:
+  + lamrest :: 6562.82
+  + lam0 :: 6557
+  + lamscale :: 0.043752133
+  + d vel :: 2

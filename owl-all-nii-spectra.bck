@@ -68,7 +68,7 @@ colorbarrgb colorbar rgb 0.5 0.5 0.5 1 1 1 0
 colorbarrgb tag "{}"
 CreateNameNumberFrame Frame1 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec055-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec055-nii-rot.fits file,mode {} load,type mmapincr file,type fits]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -111,12 +111,12 @@ Frame1 clip zscale contrast 0.25
 Frame1 clip zscale sample 600
 Frame1 clip zscale line 120
 Frame1 pan preserve 0
-Frame1 pan to physical  151 257 
+Frame1 pan to physical  209.74996 68.08337 
 Frame1 3d view point 0 0 0 0 0
-Frame1 zoom to  0.5 0.5 
+Frame1 zoom to  0.72 0.72 
 Frame1 rotate to 0
 Frame1 orient none
-Frame1 wcs align 0
+Frame1 wcs align 1
 Frame1 block to  1 1 
 Frame1 marker centroid radius 10
 Frame1 marker centroid iteration 30
@@ -126,7 +126,7 @@ Frame1 mask mark 1
 Frame1 mask transparency 0
 CreateNameNumberFrame Frame2 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec058-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec058-nii-rot.fits file,mode {} load,type mmapincr file,type fits]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -169,12 +169,12 @@ Frame2 clip zscale contrast 0.25
 Frame2 clip zscale sample 600
 Frame2 clip zscale line 120
 Frame2 pan preserve 0
-Frame2 pan to physical  151 257 
+Frame2 pan to physical  209.74996 68.08337 
 Frame2 3d view point 0 0 0 0 0
-Frame2 zoom to  0.5 0.5 
+Frame2 zoom to  0.72 0.72 
 Frame2 rotate to 0
 Frame2 orient none
-Frame2 wcs align 0
+Frame2 wcs align 1
 Frame2 block to  1 1 
 Frame2 marker centroid radius 10
 Frame2 marker centroid iteration 30
@@ -184,7 +184,7 @@ Frame2 mask mark 1
 Frame2 mask transparency 0
 CreateNameNumberFrame Frame3 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec339-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec339-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -227,12 +227,12 @@ Frame3 clip zscale contrast 0.25
 Frame3 clip zscale sample 600
 Frame3 clip zscale line 120
 Frame3 pan preserve 0
-Frame3 pan to physical  313 151 
+Frame3 pan to physical  277.83333 141.66659 
 Frame3 3d view point 0 0 0 0 0
-Frame3 zoom to  1 1 
+Frame3 zoom to  0.72 0.72 
 Frame3 rotate to 0
 Frame3 orient none
-Frame3 wcs align 0
+Frame3 wcs align 1
 Frame3 block to  1 1 
 Frame3 marker centroid radius 10
 Frame3 marker centroid iteration 30
@@ -242,7 +242,7 @@ Frame3 mask mark 1
 Frame3 mask transparency 0
 CreateNameNumberFrame Frame4 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec324-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec324-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -285,12 +285,12 @@ Frame4 clip zscale contrast 0.25
 Frame4 clip zscale sample 600
 Frame4 clip zscale line 120
 Frame4 pan preserve 0
-Frame4 pan to physical  313 151 
+Frame4 pan to physical  277.83333 141.66659 
 Frame4 3d view point 0 0 0 0 0
-Frame4 zoom to  1 1 
+Frame4 zoom to  0.72 0.72 
 Frame4 rotate to 0
 Frame4 orient none
-Frame4 wcs align 0
+Frame4 wcs align 1
 Frame4 block to  1 1 
 Frame4 marker centroid radius 10
 Frame4 marker centroid iteration 30
@@ -300,7 +300,7 @@ Frame4 mask mark 1
 Frame4 mask transparency 0
 CreateNameNumberFrame Frame5 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec321-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec321-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -343,12 +343,12 @@ Frame5 clip zscale contrast 0.25
 Frame5 clip zscale sample 600
 Frame5 clip zscale line 120
 Frame5 pan preserve 0
-Frame5 pan to physical  313 151 
+Frame5 pan to physical  277.83333 141.66659 
 Frame5 3d view point 0 0 0 0 0
-Frame5 zoom to  1 1 
+Frame5 zoom to  0.72 0.72 
 Frame5 rotate to 0
 Frame5 orient none
-Frame5 wcs align 0
+Frame5 wcs align 1
 Frame5 block to  1 1 
 Frame5 marker centroid radius 10
 Frame5 marker centroid iteration 30
@@ -358,7 +358,7 @@ Frame5 mask mark 1
 Frame5 mask transparency 0
 CreateNameNumberFrame Frame6 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec318-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec318-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -401,12 +401,12 @@ Frame6 clip zscale contrast 0.25
 Frame6 clip zscale sample 600
 Frame6 clip zscale line 120
 Frame6 pan preserve 0
-Frame6 pan to physical  313 151 
+Frame6 pan to physical  277.83333 141.66659 
 Frame6 3d view point 0 0 0 0 0
-Frame6 zoom to  1 1 
+Frame6 zoom to  0.72 0.72 
 Frame6 rotate to 0
 Frame6 orient none
-Frame6 wcs align 0
+Frame6 wcs align 1
 Frame6 block to  1 1 
 Frame6 marker centroid radius 10
 Frame6 marker centroid iteration 30
@@ -416,7 +416,7 @@ Frame6 mask mark 1
 Frame6 mask transparency 0
 CreateNameNumberFrame Frame7 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec314-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec314-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -459,12 +459,12 @@ Frame7 clip zscale contrast 0.25
 Frame7 clip zscale sample 600
 Frame7 clip zscale line 120
 Frame7 pan preserve 0
-Frame7 pan to physical  313 151 
+Frame7 pan to physical  277.83333 141.66659 
 Frame7 3d view point 0 0 0 0 0
-Frame7 zoom to  1 1 
+Frame7 zoom to  0.72 0.72 
 Frame7 rotate to 0
 Frame7 orient none
-Frame7 wcs align 0
+Frame7 wcs align 1
 Frame7 block to  1 1 
 Frame7 marker centroid radius 10
 Frame7 marker centroid iteration 30
@@ -474,7 +474,7 @@ Frame7 mask mark 1
 Frame7 mask transparency 0
 CreateNameNumberFrame Frame8 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec199-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec199-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -517,12 +517,12 @@ Frame8 clip zscale contrast 0.25
 Frame8 clip zscale sample 600
 Frame8 clip zscale line 120
 Frame8 pan preserve 0
-Frame8 pan to physical  313 151 
+Frame8 pan to physical  277.83333 141.66659 
 Frame8 3d view point 0 0 0 0 0
-Frame8 zoom to  1 1 
+Frame8 zoom to  0.72 0.72 
 Frame8 rotate to 0
 Frame8 orient none
-Frame8 wcs align 0
+Frame8 wcs align 1
 Frame8 block to  1 1 
 Frame8 marker centroid radius 10
 Frame8 marker centroid iteration 30
@@ -532,7 +532,7 @@ Frame8 mask mark 1
 Frame8 mask transparency 0
 CreateNameNumberFrame Frame9 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec203-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec203-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -575,12 +575,12 @@ Frame9 clip zscale contrast 0.25
 Frame9 clip zscale sample 600
 Frame9 clip zscale line 120
 Frame9 pan preserve 0
-Frame9 pan to physical  313 151 
+Frame9 pan to physical  277.83333 141.66659 
 Frame9 3d view point 0 0 0 0 0
-Frame9 zoom to  1 1 
+Frame9 zoom to  0.72 0.72 
 Frame9 rotate to 0
 Frame9 orient none
-Frame9 wcs align 0
+Frame9 wcs align 1
 Frame9 block to  1 1 
 Frame9 marker centroid radius 10
 Frame9 marker centroid iteration 30
@@ -590,7 +590,7 @@ Frame9 mask mark 1
 Frame9 mask transparency 0
 CreateNameNumberFrame Frame10 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec206-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec206-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -633,12 +633,12 @@ Frame10 clip zscale contrast 0.25
 Frame10 clip zscale sample 600
 Frame10 clip zscale line 120
 Frame10 pan preserve 0
-Frame10 pan to physical  313 151 
+Frame10 pan to physical  277.83333 141.66659 
 Frame10 3d view point 0 0 0 0 0
-Frame10 zoom to  1 1 
+Frame10 zoom to  0.72 0.72 
 Frame10 rotate to 0
 Frame10 orient none
-Frame10 wcs align 0
+Frame10 wcs align 1
 Frame10 block to  1 1 
 Frame10 marker centroid radius 10
 Frame10 marker centroid iteration 30
@@ -648,7 +648,7 @@ Frame10 mask mark 1
 Frame10 mask transparency 0
 CreateNameNumberFrame Frame11 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec209-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec209-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -691,12 +691,12 @@ Frame11 clip zscale contrast 0.25
 Frame11 clip zscale sample 600
 Frame11 clip zscale line 120
 Frame11 pan preserve 0
-Frame11 pan to physical  313 151 
+Frame11 pan to physical  277.83333 141.66659 
 Frame11 3d view point 0 0 0 0 0
-Frame11 zoom to  1 1 
+Frame11 zoom to  0.72 0.72 
 Frame11 rotate to 0
 Frame11 orient none
-Frame11 wcs align 0
+Frame11 wcs align 1
 Frame11 block to  1 1 
 Frame11 marker centroid radius 10
 Frame11 marker centroid iteration 30
@@ -706,7 +706,7 @@ Frame11 mask mark 1
 Frame11 mask transparency 0
 CreateNameNumberFrame Frame12 base
 global loadParam
-array set loadParam [list load,layer {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec213-nii.fits file,mode {} load,type mmapincr file,type fits]
+array set loadParam [list file,mode {} file,name /Users/will/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/spec213-nii.fits load,layer {} file,type fits load,type mmapincr]
 if [BackupFindFile loadParam] {
   ProcessLoad
 }
@@ -749,12 +749,12 @@ Frame12 clip zscale contrast 0.25
 Frame12 clip zscale sample 600
 Frame12 clip zscale line 120
 Frame12 pan preserve 0
-Frame12 pan to physical  313 151 
+Frame12 pan to physical  277.83333 141.66659 
 Frame12 3d view point 0 0 0 0 0
-Frame12 zoom to  1 1 
+Frame12 zoom to  0.72 0.72 
 Frame12 rotate to 0
 Frame12 orient none
-Frame12 wcs align 0
+Frame12 wcs align 1
 Frame12 block to  1 1 
 Frame12 marker centroid radius 10
 Frame12 marker centroid iteration 30
@@ -765,7 +765,7 @@ Frame12 mask transparency 0
 global pds9
 array set pds9 { nan,msg #332244 dialog native text,font courier samp 1 font,msg Helvetica iraf 1 threads 12 font,weight normal automarker 1 bg,msg Black language locale text,font,weight normal dialog,all 0 nan #804020 font,slant roman confirm 1 backup 0 language,dir {} font helvetica language,name English bg #808080 xpa 1 text,font,msg Courier theme native tcl 0 dialog,center 0 font,size 13 text,font,slant roman text,font,size 11 }
 global current
-array set current { colorbar colorbar orient none zoom { 0.5 0.5 } mode none ext {} display tile cursor {} align 0 rotate 0 rgb red frame Frame2 }
+array set current { colorbar colorbar orient none zoom { 0.72 0.72 } mode none ext {} display tile cursor {} align 1 rotate 0 rgb red frame Frame12 }
 global pcurrent
 array set pcurrent { orient none zoom { 1 1 } mode none display single align 0 rotate 0 }
 global view
@@ -813,13 +813,13 @@ array set bin { wheel,factor 1.2 wheel 0 buffersize 1024 depth 1 lock 0 function
 global pbin
 array set pbin { wheel,factor 1.2 wheel 0 lock 0 depth 1 buffersize 1024 function sum factor { 1 1 } }
 global panzoom
-array set panzoom { wheel,factor 1.2 skyformat sexagesimal preserve 0 mode click wheel 1 system wcs lock none sky fk5 }
+array set panzoom { wheel,factor 1.2 skyformat sexagesimal preserve 0 mode click wheel 1 system wcs lock wcs sky fk5 }
 global ppanzoom
 array set ppanzoom { wheel,factor 1.2 preserve 0 wheel 1 mode click }
 global crop
 array set crop { skyformat sexagesimal rcoord wcs dformat degrees system wcs lock none dcoord wcs sky fk5 }
 global scale
-array set scale { lock 0 type linear scope global log 1000 min 1 bins 512 xaxis full mode 99.5 datasec 1 max 100 yaxis log lock,limits 0 }
+array set scale { lock 0 type linear scope global log 1000 min 1 bins 512 xaxis full mode user datasec 1 max 100 yaxis log lock,limits 0 }
 global pscale
 array set pscale { datasec 1 mode minmax scope global log 1000 type linear }
 global minmax
@@ -837,7 +837,7 @@ array set pmarker { panda,ang2 360 bpanda,ang1 0 shape circle show 1 bpanda,ang2
 global centroid
 array set centroid {  }
 global wcs
-array set wcs { skyformat sexagesimal system wcs frame Frame2 sky fk5 }
+array set wcs { skyformat sexagesimal system wcs frame Frame12 sky fk5 }
 global pwcs
 array set pwcs { skyformat sexagesimal system wcs sky fk5 }
 global ime
@@ -857,7 +857,7 @@ array set mask { transparency 0 mark 1 color red }
 global pmask
 array set pmask { transparency 0 color red mark 1 }
 global contour
-array set contour { numlevel 5 scale linear init,scale 0 method block view 0 copy {} dash 0 width 1 color,msg Green smooth 4 log 1000 init,limits 0 min 2.85851 mode 99.5 init,mode 0 max 88.1791 color green }
+array set contour { numlevel 5 scale linear init,scale 0 method block view 0 copy {} dash 0 width 1 color,msg Green smooth 4 log 1000 init,limits 0 min -2.3157299 mode user init,mode 0 max 56.450039 color green }
 global pcontour
 array set pcontour { numlevel 5 dash 0 width 1 method block color,msg Green smooth 4 color green view 0 }
 global grid
