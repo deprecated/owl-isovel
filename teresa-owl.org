@@ -16,16 +16,248 @@
   + First resample onto a common spatial grid
   + Rescale each image to equalise the exposures
     + See [[file:owl-all-radec-images.bck]]
-  + Take a median of each pisel, which should remove the slit parts
+  + Take a median of each pixel, which should remove the slit parts
   + Then divide each image by the median image to get the slit profile
 * Utility functions
 :PROPERTIES:
 :header-args: :tangle owl_utils.py
 :END:
+** Imports for utilities
+#+BEGIN_SRC python
+import numpy as np
+from astropy.wcs import WCS
+from astropy.coordinates import SkyCoord
+from astropy.wcs.utils import pixel_to_skycoord
+from astropy import units as u
 
-
-#+BEGIN_SRC python :tangle owl_utils.py
+#+END_SRC
+** Folder with the original data in it
+#+BEGIN_SRC python
 DATADIR = '/Users/will/Dropbox/Papers/LL-Objects/NGC3587'
+#+END_SRC
+** Synthetic slit from reference image
++ Copied from [[id:28077E60-1BFE-4AD4-8DDE-5C292C252564][Construct the synthetic slit from the reference image]]
+#+BEGIN_SRC python
+def slit_profile(ra, dec, image, wcs):
+    """
+    Find the image intensity for a list of positions (ra and dec)
+    """
+    xi, yj = wcs.all_world2pix(ra, dec, 0)
+    # Find nearest integer pixel
+    ii, jj = np.floor(xi + 0.5), np.floor(yj + 0.5)
+    print(ra[::100], dec[::100])
+    print(ii[::100], jj[::100])
+    ny, nx = image.shape
+    return np.array([image[j, i] if (i < nx and j < ny) else np.nan for i, j in zip(ii, jj)])
+#+END_SRC
+** World coords from slit pixels
++ Copied from [[id:1D9200A9-45BA-4128-894B-4D4DF84FC2F2][Find the world coordinates of each pixel along the slit]]
+#+BEGIN_SRC python
+def find_slit_coords(db, hdr, shdr):
+    """Find the coordinates of all the pixels along a spectrograph slit
+
+    Input arguments are a dict-like 'db' of hand-measured values (must
+    contain 'saxis', 'islit' and 'shift') and a FITS headers 'hdr' from
+    the image+slit exposure and 'shdr' from a spectrum exposure
+
+    Returns a dict of 'ds' (slit pixel scale), 'PA' (slit position
+    angle), 'RA' (array of RA values in degrees along slit), 'Dec'
+    (array of Dec values in degrees along slit)
+
+    """
+    jstring = str(db['saxis'])  # which image axis lies along slit
+    dRA_arcsec = hdr['CD1_'+jstring]*3600*np.cos(np.radians(hdr['CRVAL2']))
+    dDEC_arcsec = hdr['CD2_'+jstring]*3600
+    ds = np.hypot(dRA_arcsec, dDEC_arcsec)
+    PA = np.degrees(np.arctan2(dRA_arcsec, dDEC_arcsec))
+
+    # Pixel coords of each slit pixel on image (in 0-based convention)
+    if jstring == '1':
+        # Slit is horizontal in IMAGE coords
+        ns = shdr['NAXIS1']
+        iarr = np.arange(ns) - float(db['shift'])
+        jarr = np.ones(ns)*float(db['islit'])
+        try:
+            image_binning = hdr['CBIN']
+            spec_binning = shdr['CBIN']
+        except KeyError:
+            image_binning = hdr['CCDXBIN']
+            spec_binning = shdr['CCDXBIN']
+
+        # correct for difference in binning between the image+slit and the spectrum
+        iarr *= spec_binning/image_binning
+    elif jstring == '2':
+        # Slit is vertical in IMAGE coords
+        ns = shdr['NAXIS2']
+        iarr = np.ones(ns)*float(db['islit'])
+        jarr = np.arange(ns) - float(db['shift'])
+        try:
+            image_binning = hdr['RBIN']
+            spec_binning = shdr['RBIN']
+        except KeyError:
+            image_binning = hdr['CCDYBIN']
+            spec_binning = shdr['CCDYBIN']
+
+        jarr *= spec_binning/image_binning
+    else:
+        raise ValueError('Slit axis (saxis) must be 1 or 2')
+
+    print('iarr =', iarr[::100], 'jarr =', jarr[::100])
+    # Also correct the nominal slit plate scale
+    ds *= spec_binning/image_binning
+
+    # Convert to world coords, using the native frame
+    w = WCS(hdr)
+    observed_frame = w.wcs.radesys.lower()
+    # Note it is vital to ensure the pix2world transformation returns
+    # values in the order (RA, Dec), even if the image+slit may have
+    # Dec first
+    coords = SkyCoord(*w.all_pix2world(iarr, jarr, 0, ra_dec_order=True),
+                      unit=(u.deg, u.deg), frame=observed_frame)
+    print('coords =', coords[::100])
+    print('Binning along slit: image =', image_binning, 'spectrum =', spec_binning)
+    # Make sure to return the coords in the ICRS frame
+    return {'ds': ds, 'PA': PA,
+            'RA': coords.icrs.ra.value,
+            'Dec': coords.icrs.dec.value}
+#+END_SRC
+** Make fits header
++ Copied from [[id:B59C08A8-8FE0-4A36-B55C-97CC92A25A69][Package up the slit coordinates for use in a FITS header]]
+
+#+BEGIN_SRC python
+def make_slit_wcs(db, slit_coords, spechdu):
+    # Input WCS from original spectrum
+    wspec = WCS(spechdu.header)
+    wspec.fix()
+
+    #
+    # First find wavelength scale from the spectrum  
+    #
+
+    # For original spectrum, the wavelength and slit axes are 0-based,
+    # but in FITS axis order instead of python access order, since
+    # that is the way that that the WCS object likes to do it
+    ospec_wavaxis = 2 - db['saxis']
+    ospec_slitaxis = db['saxis'] - 1
+
+    # The rules are that CDi_j is used if it is present, and only if
+    # it is absent should CDELTi be used
+    if wspec.wcs.has_cd():
+        dwav = wspec.wcs.cd[ospec_wavaxis, ospec_wavaxis]
+        # Check that the off-diagonal terms are zero
+        assert(wspec.wcs.cd[0, 1] == wspec.wcs.cd[1, 0] == 0.0)
+    else:
+        dwav = wspec.wcs.cdelt[ospec_wavaxis]
+        if wspec.wcs.has_pc():
+            # If PCi_j is also present, make sure it is identity matrix
+            assert(wspec.wcs.pc == np.eye(2))
+    wav0 = wspec.wcs.crval[ospec_wavaxis]
+    wavpix0 = wspec.wcs.crpix[ospec_wavaxis]
+
+    #
+    # Second, find the displacement scale and ref point from the slit_coords
+    #
+    # The slit_coords should already be in ICRS frame
+    c = SkyCoord(slit_coords['RA'], slit_coords['Dec'], unit=u.deg)
+    # Find vector of separations between adjacent pixels
+    seps = c[:-1].separation(c[1:])
+    # Ditto for the position angles
+    PAs = c[:-1].position_angle(c[1:])
+    # Check that they are all the same as the first one
+    assert(np.allclose(seps/seps[0], 1.0))
+    # assert(np.allclose(PAs/PAs[0], 1.0, rtol=1.e-4))
+    # Then use the first one as the slit pixel size and PA
+    ds, PA, PA_deg = seps[0].deg, PAs.mean().rad, PAs.mean().deg
+    # And for the reference values too
+    RA0, Dec0 = c[0].ra.deg, c[0].dec.deg
+
+    #
+    # Now make a new shiny output WCS, constructed from scratch
+    #
+    w = WCS(naxis=3)
+
+    # Make use of all the values that we calculated above
+    w.wcs.crpix = [wavpix0, 1, 1]
+    w.wcs.cdelt = [dwav, ds, ds]
+    w.wcs.crval = [wav0, RA0, Dec0]
+    # PC order is i_j = [[1_1, 1_2, 1_3], [2_1, 2_2, 2_3], [3_1, 3_2, 3_3]]
+    w.wcs.pc = [[1.0, 0.0, 0.0],
+                [0.0, np.sin(PA), -np.cos(PA)],
+                [0.0, np.cos(PA), np.sin(PA)]]
+
+    #
+    # Finally add in auxillary info
+    #
+    w.wcs.radesys = 'ICRS'
+    w.wcs.ctype = ['AWAV', 'RA---TAN', 'DEC--TAN']
+    w.wcs.specsys = 'TOPOCENT'
+    w.wcs.cunit = [u.Angstrom, u.deg, u.deg]
+    w.wcs.name = 'TopoWav'
+    w.wcs.cname = ['Observed air wavelength', 'Right Ascension', 'Declination']
+    w.wcs.mjdobs = wspec.wcs.mjdobs
+    w.wcs.datfix()              # Sets DATE-OBS from MJD-OBS
+
+    # Check the new pixel values
+    npix = len(slit_coords['RA'])
+    check_coords = pixel_to_skycoord(np.arange(npix), [0]*npix, w, 0)
+    # These should be the same as the ICRS coords in slit_coords
+    print('New coords:', check_coords[::100])
+    print('Displacements in arcsec:', check_coords.separation(c).arcsec[::100])
+    # 15 Sep 2015: They seem to be equal to within about 1e-2 arcsec
+
+    return w
+#+END_SRC
+** Extract profile along PV slit
++ Copied from [[id:2A668A05-2A03-401C-A0D9-441821699E60][Remove background and sum over wavelength across line]]
++ Now also returns continuum profile
+
+#+BEGIN_SRC python
+  def extract_profile(data, wcs, wavrest, db, dw=7.0):
+      data, bgdata = remove_bg_and_regularize(data, wcs, wavrest, db)
+      # pixel limits for line extraction
+      lineslice = wavs2slice([wavrest-dw/2, wavrest+dw/2], wcs, db)
+      return data[:, lineslice].sum(axis=1), bgdata.sum(axis=1)
+
+
+  def wavs2slice(wavs, wcs, db):
+      """Convert a wavelength interval `wavs` (length-2 sequence) to a slice of the relevant axis`"""
+      assert len(wavs) == 2
+      isT = db['saxis'] == 1
+      if isT:
+          _, xpixels = wcs.all_world2pix([0, 0], wavs, 0)
+      else:
+          xpixels, _ = wcs.all_world2pix(wavs, [0, 0], 0)
+      print('Wav:', wavs, 'Pixel:', xpixels)
+      i1, i2 = np.maximum(0, (xpixels+0.5).astype(int))
+      return slice(min(i1, i2), max(i1, i2))
+
+
+  def remove_bg_and_regularize(data, wcs, wavrest, db, dwbg_in=7.0, dwbg_out=10.0):
+      '''
+      Transpose data if necessary, and then subtract off the background (blue and red of line)
+      '''
+      isT = db['saxis'] == 1
+      # Make sure array axis order is (position, wavelength)
+      if isT:
+          data = data.T
+      # pixel limits for blue, red bg extraction
+      bslice = wavs2slice([wavrest-dwbg_out/2, wavrest-dwbg_in/2], wcs, db)
+      rslice = wavs2slice([wavrest+dwbg_in/2, wavrest+dwbg_out/2], wcs, db)
+      # extract backgrounds on blue and red sides
+      bgblu = data[:, bslice].mean(axis=1)
+      bgred = data[:, rslice].mean(axis=1)
+      # take weighted average, accounting for cases where the bg region
+      # does not fit in the image
+      weight_blu = data[:, bslice].size
+      weight_red = data[:, rslice].size
+      print('Background weights:', weight_blu, weight_red)
+      bg = (bgblu*weight_blu + bgred*weight_red)/(weight_blu + weight_red)
+      bgdata = np.zeros_like(data)
+      bgdata += bg[:, None]
+      return data - bgdata, bgdata
+
+
+
 #+END_SRC
 
 * DONE Make the median image
@@ -93,6 +325,9 @@ CLOSED: [2016-06-17 Fri 19:36]
 | pos12 | posiciones/spm338_ardec.fits | -1.77 | 45.44 |
 
 ** Set up the output grid and resample and normalize each image
+:PROPERTIES:
+:ID:       14A0BB9E-13A5-498E-AE28-3C68D7F541B2
+:END:
 + Use 0.5 arcsec pixels
 + Central star position:
   + 11:14:47.699 +55:01:09.86
@@ -141,7 +376,7 @@ CLOSED: [2016-06-17 Fri 19:36]
       ny, nx = image.shape
       hdu.header.remove('@EPOCH')
       w = WCS(hdu.header)
-      # Create world coord arrays for output image
+      # Create world coord arrays for input image
       ii, jj = np.meshgrid(np.arange(nx), np.arange(ny))
       ra, dec = w.all_pix2world(ii, jj, 0)
       # Do the interpolation
@@ -193,7 +428,660 @@ time python medianize_images.py
 
 #+RESULTS:
 * Generate the PV images
-** Put the slits on the sky
+** Table of slit positions on image+slit
+:PROPERTIES:
+:TABLE_EXPORT_FILE: slit-positions.tab
+:TABLE_EXPORT_FORMAT: orgtbl-to-tsv
+:END:
+
+#+name: slit-positions
+| pos | saxis | islit | shift |
+|-----+-------+-------+-------|
+|  01 |     1 |   330 |   -50 |
+|  02 |     1 |   333 |   -47 |
+|  03 |     1 |   335 |   -50 |
+|  04 |     1 |   340 |   -47 |
+|  05 |     1 |   345 |   -45 |
+|  06 |     2 |   322 |    45 |
+|  07 |     1 |   344 |   -45 |
+|  08 |     2 |   322 |    45 |
+|  09 |     1 |   342 |   -45 |
+|  10 |     1 |   341 |   -50 |
+|  11 |     1 |   339 |   -50 |
+|  12 |     1 |   339 |   -50 |
+
+
+
+** DONE Flux calibrate the slits
+CLOSED: [2016-08-16 Tue 22:05]
++ It would probably be best to do this first
++ As well as flux calibrating, it will also determine the offsets along the slit
++ And adds WCS info to the slits
+*** Program owl-slit-calibrate.py
+:PROPERTIES:
+:header-args: :tangle owl-slit-calibrate.py :comments link
+:END:
+
+#+BEGIN_SRC python
+  import os
+  import sys
+  import numpy as np
+  import astropy
+  from astropy.table import Table, hstack
+  from astropy.io import fits
+  from astropy.wcs import WCS
+  from astropy.wcs.utils import pixel_to_skycoord
+  from matplotlib import pyplot as plt
+  import seaborn as sns
+  from astropy import units as u
+  from astropy.coordinates import SkyCoord
+  from astropy.modeling import models, fitting
+  from owl_utils import (DATADIR, slit_profile, extract_profile, 
+                         find_slit_coords, make_slit_wcs, remove_bg_and_regularize)
+
+  restwavs = {'ha': 6562.79, 'nii': 6583.45}
+
+  def fit_cheb(x, y, npoly=3, mask=None):
+      """Fits a Chebyshev poly to y(x) and returns fitted y-values"""
+      fitter = fitting.LinearLSQFitter()
+      p_init = models.Chebyshev1D(npoly, domain=[x.min(), x.max()])
+      if mask is None:
+          mask = np.ones_like(x).astype(bool)
+      p = fitter(p_init, x[mask], y[mask])
+      print(p)
+      return p(x)
+
+  sns.set_palette('RdPu_d', 3)
+  def make_three_plots(spec, calib, prefix, niirat=None):
+      assert spec.shape == calib.shape
+      fig, axes = plt.subplots(3, 1)
+
+
+      ypix = np.arange(len(calib))
+      m = np.isfinite(spec) & np.isfinite(calib)
+      spec = spec[m]
+      calib = calib[m]
+      ypix = ypix[m]
+      if niirat is not None:
+          niirat = niirat[m]
+
+      vmin, vmax = 0.0, np.percentile(calib, 95) + 4*calib.std()
+      ratio = spec/calib
+      mask = (spec > np.percentile(spec, 25)) & (ratio > 0.5) & (ratio < 2.0)
+      # mask = (ypix > 10.0) & (ypix < ypix.max() - 10.0) \
+      #        & (ratio > np.median(ratio) - 2*ratio.std()) \
+      #        & (ratio < np.median(ratio) + 2*ratio.std()) 
+      try:
+          ratio_fit = fit_cheb(ypix, ratio, mask=mask, npoly=1)
+      except:
+          ratio_fit = np.ones_like(ypix)
+
+      alpha = 0.8
+
+      # First, plot two profiles against each other to check for zero-point offsets
+      axes[0].plot(calib, spec/ratio_fit, '.', alpha=alpha)
+      axes[0].plot([vmin, vmax], [vmin, vmax], '-', alpha=alpha)
+      axes[0].set_xlim(vmin, vmax)
+      axes[0].set_ylim(vmin, vmax)
+      axes[0].set_xlabel('Calibration Image')
+      axes[0].set_ylabel('Corrected Integrated Spectrum')
+
+      # Second, plot each against slit pixel to check spatial offset
+      axes[1].plot(ypix, calib, alpha=alpha, label='Calibration Image')
+      axes[1].plot(ypix, spec/ratio_fit, alpha=alpha, lw=1.0,
+                   label='Corrected Integrated Spectrum')
+      axes[1].plot(ypix, spec, alpha=alpha, lw=0.5,
+                   label='Uncorrected Integrated Spectrum')
+      axes[1].set_xlim(0.0, ypix.max())
+      axes[1].set_ylim(vmin, vmax)
+      axes[1].legend(fontsize='xx-small', loc='upper right')
+      axes[1].set_xlabel('Slit pixel')
+      axes[1].set_ylabel('Profile')
+
+      # Third, plot ratio to look for spatial trends
+      axes[2].plot(ypix, ratio, alpha=alpha)
+      axes[2].plot(ypix, ratio_fit, alpha=alpha)
+      if niirat is not None:
+          axes[2].plot(ypix, niirat, 'b', lw=0.5, alpha=0.5)
+      axes[2].set_xlim(0.0, ypix.max())
+      axes[2].set_ylim(0.0, 2.5)
+      axes[2].set_xlabel('Slit pixel')
+      axes[2].set_ylabel('Ratio: Spec / Calib')
+
+
+      fig.set_size_inches(5, 8)
+      fig.tight_layout()
+      fig.savefig(prefix+'.png', dpi=300)
+
+      return ratio_fit
+
+
+  hatab = Table.read('spectra-ha.tab', format='ascii.tab')
+  niitab = Table.read('spectra-nii.tab', format='ascii.tab')
+  imtab = Table.read('list-of-images.tab', format='ascii.tab')
+  slittab = Table.read('slit-positions.tab', format='ascii.tab')
+  table = hstack([hatab, niitab, imtab, slittab],
+                 table_names=['ha', 'nii', 'im', 'slit'])
+  # Photometric reference image
+  photom, = fits.open('imslit-median.fits')
+  wphot = WCS(photom.header)
+
+  for row in table:
+      ha_hdu, = fits.open(DATADIR +'/SPMha/' + row['file_ha'])
+      nii_hdu, = fits.open(DATADIR +'/SPMnii/' + row['file_nii'])
+      im_hdu, = fits.open(DATADIR +'/' + row['filename'])
+      im_hdu.header.remove('@EPOCH')
+
+      slit_coords = find_slit_coords(row, im_hdu.header, ha_hdu.header)
+      calib_profile = slit_profile(slit_coords['RA'], slit_coords['Dec'],
+                                   photom.data, wphot)
+
+      ha_profile, ha_bg = extract_profile(ha_hdu.data, WCS(ha_hdu.header),
+                                          restwavs['ha'], row)
+      nii_profile, nii_bg = extract_profile(nii_hdu.data, WCS(nii_hdu.header),
+                                            restwavs['nii'], row)
+
+
+      # Make a fake Ha+[N II] line (really should add continuum too)
+      spec_profile = (ha_profile+1.333*nii_profile) + 0.05*(ha_bg + 2*nii_bg)
+      # Zeroth order approximation to calibration
+      rat0 = np.nansum(spec_profile)/np.nansum(calib_profile)
+      print('Coarse calibration: ratio =', rat0)
+      spec_profile /= rat0
+
+      plt_prefix = '{:03d}-calib'.format(row.index+1)
+      ratio = make_three_plots(spec_profile, calib_profile,
+                               plt_prefix, niirat=nii_profile/ha_profile)
+
+      # Save calibrated spectra to files
+      for lineid, hdu in [['ha', ha_hdu], ['nii', nii_hdu]]:
+          restwav = restwavs[lineid]
+          print('Saving', lineid, 'calibrated spectrum')
+          # Apply basic calibration zero-point and scale
+          hdu.data, _ = remove_bg_and_regularize(hdu.data, WCS(hdu.header),
+                                                 restwav, row)/rat0
+          # Regularize spectral data so that wavelength is x and pos is y
+          # This is now done by the bg subtraction function
+
+          # Apply polynomial correction along slit
+          if ratio is not None:
+              hdu.data /= ratio.mean()
+          # Extend in the third dimension (degenerate axis perp to slit)
+          hdu.data = hdu.data[None, :, :]
+
+          # Create the WCS object for the calibrated slit spectra
+          wslit = make_slit_wcs(row, slit_coords, hdu)
+          # Set the rest wavelength for this line
+          wslit.wcs.restwav = (restwav*u.Angstrom).to(u.m).value
+          # # Remove WCS keywords that might cause problems
+          # for i in 1, 2:
+          #     for j in 1, 2:
+          #         kwd = 'CD{}_{}'.format(i, j)
+          #         if kwd in hdu.header:
+          #             hdu.header.remove(kwd) 
+          # Then update the header with the new WCS structure as the 'A'
+          # alternate transform
+          hdu.header.update(wslit.to_header(key='A'))
+          # Also save the normalization factor as a per-slit weight to use later
+          hdu.header['WEIGHT'] = rat0
+
+          # And better not to change the original WCS at all
+          # Unless we have transposed the array, which we have to compensate for
+          if row['saxis'] == 1:
+              for k in ['CRPIX{}', 'CRVAL{}', 'CDELT{}', 'CD{0}_{0}']:
+                  hdu.header[k.format('1')], hdu.header[k.format('2')] = hdu.header[k.format('2')], hdu.header[k.format('1')] 
+          # # And write a bowdlerized version that DS9 can understand as the main WCS
+          # hdu.header.update(fixup4ds9(wslit).to_header(key=' '))
+          calibfile = 'Calibrated/{}-{}.fits'.format(row['pos_nii'], lineid)
+          hdu.writeto(calibfile, clobber=True)
+      
+#+END_SRC
+*** Run the program
+#+BEGIN_SRC sh :tangle no :results verbatim
+python owl-slit-calibrate.py
+#+END_SRC
+** Test the heliocentric correction module
++ This gives results within 0.2 km/s of Teresa's values
++ But the sign is opposite
+
+#+BEGIN_SRC python :return outtab
+import sys
+import glob
+from astropy.io import fits
+sys.path.append('/Users/will/Dropbox/OrionWest')
+from helio_utils import helio_topo_from_header
+outtab = [['File', 'Date', 'JD', 'ST', 'RA', 'Dec', 'Helio'], None]
+speclist = glob.glob('Calibrated/pos*-ha.fits')
+for fn in speclist:
+    hdr = fits.open(fn)[0].header
+    id_ = fn.split('/')[-1].split('.')[0]
+    outtab.append([id_, hdr.get('DATE-OBS'),
+                   hdr.get('MJD-OBS') or hdr.get('JD'),
+                   hdr.get('ST'), hdr.get('RA'), hdr.get('DEC'),
+                   '{:.2f}'.format(helio_topo_from_header(hdr, usewcs='A'))
+    ])
+#+END_SRC
+
+#+RESULTS:
+| File     |       Date |      JD |       ST |         RA |        Dec | Helio |
+|----------+------------+---------+----------+------------+------------+-------|
+| pos01-ha | 2013-02-18 | 56341.0 | 15:13:08 | 11:15:24.2 | 54:57:23.0 |  2.45 |
+| pos02-ha | 2013-02-18 | 56341.0 | 14:47:31 | 11:15:24.7 |  54:57:1.0 |  2.43 |
+| pos03-ha | 2013-02-18 | 56341.0 | 14:24:36 | 11:15:25.2 | 54:56:37.0 |  2.42 |
+| pos04-ha | 2013-02-18 | 56341.0 | 14:01:21 | 11:15:25.6 | 54:56:15.0 |  2.40 |
+| pos05-ha | 2013-02-18 | 56341.0 | 13:08:10 | 11:15:27.9 | 54:55:48.0 |  2.35 |
+| pos06-ha | 2001-04-23 | 52022.0 | 13:26:33 |   11:14:53 |  +55:00:51 | 19.75 |
+| pos07-ha | 2013-02-19 | 56342.0 | 12:46:47 | 11:15:28.1 | 54:56:20.0 |  2.70 |
+| pos08-ha | 2001-04-23 | 52022.0 | 12:57:53 |   11:14:54 |  +55:00:14 | 19.73 |
+| pos09-ha | 2013-02-19 | 56342.0 | 13:15:17 | 11:15:27.3 | 54:55:48.0 |  2.72 |
+| pos10-ha | 2013-02-19 | 56342.0 | 13:39:28 | 11:15:26.5 | 54:55:34.0 |  2.74 |
+| pos11-ha | 2013-02-19 | 56342.0 | 14:02:54 | 11:15:26.0 | 54:55:20.0 |  2.76 |
+| pos12-ha | 2013-02-19 | 56342.0 | 14:32:57 | 11:15:25.7 | 54:55:13.0 |  2.78 |
+
+** DONE Construct spectral maps
+CLOSED: [2016-08-16 Tue 23:23]
++ Do this once we have flux calibrated slits
++ Originally copied from [[id:20ADFA6F-DE49-454E-B433-D684CF3FB826][Program to generate spectral map: spectral-map.py]]
++ WCS for output image copied from [[id:14A0BB9E-13A5-498E-AE28-3C68D7F541B2][Set up the output grid and resample and normalize each image]]
+
+#+BEGIN_SRC python :tangle owl-spectral-map.py
+  import glob
+  import sys
+  import numpy as np
+  from astropy.io import fits
+  from astropy.wcs import WCS
+  from astropy.wcs.utils import pixel_to_skycoord, skycoord_to_pixel
+  import astropy.units as u
+  sys.path.append('/Users/will/Dropbox/OrionWest')
+  from helio_utils import helio_topo_from_header, vels2waves
+
+  if len(sys.argv) == 3:
+      line_id = sys.argv[1]
+      vrange = sys.argv[2]
+  elif len(sys.argv) == 2:
+      line_id = sys.argv[1]
+      vrange = None
+  else:
+      print('Usage: {} LINE_ID [VRANGE]'.format(sys.argv[0]))
+
+  def waves2pixels(waves, w):
+      n = len(waves)
+      pixels, _, _ = w.all_world2pix(waves, [RA0]*n, [Dec0]*n, 0)
+      return pixels
+
+  # First set up WCS for the output image
+  #
+  NX, NY = 512, 512
+  pixel_scale = 0.5               # arcsec
+  dRA, dDec = -pixel_scale/3600., pixel_scale/3600.
+  # Center on central star of NGC 3587
+  RA0, Dec0 = 168.6985, 55.019408
+  w = WCS(naxis=2)
+  w.wcs.cdelt = [dRA, dDec]
+  w.wcs.crpix = [0.5*(1 + NX), 0.5*(1 + NY)]
+  w.wcs.crval = [RA0, Dec0]
+  w.wcs.ctype = ['RA---TAN', 'DEC--TAN']
+  w.wcs.cunit = ['deg', 'deg']
+
+  # Arrays to hold the output image
+  outimage = np.zeros((NY, NX))
+  outweights = np.zeros((NY, NX))
+
+  slit_width = 2.0                # width in arcsec of 150 micron slit
+  slit_pix_width = slit_width/pixel_scale
+
+  speclist = glob.glob('Calibrated/*-{}.fits'.format(line_id))
+
+  # Window widths for line and BG
+  dwline = 7.0*u.Angstrom
+
+  for fn in speclist:
+      print('Processing', fn)
+      spechdu, = fits.open(fn)
+      wspec = WCS(spechdu.header, key='A')
+
+      # Trim to good portion of the slit
+      goodslice = slice(None, None)
+
+      # Find per-slit weight
+      slit_weight = spechdu.header['WEIGHT']
+
+      # Find sign of delta wavelength
+      dwav = wspec.wcs.get_cdelt()[0]*wspec.wcs.get_pc()[0, 0]
+      sgn = np.sign(dwav)         # Need to take slices backwards if this is negative
+
+      # Eliminate degenerate 3rd dimension from data array and trim off bad bits
+      spec2d = spechdu.data[0]
+
+      # Rest wavelength from FITS header is in meters
+      wavrest = wspec.wcs.restwav*u.m
+
+      # Find wavelength limits for line extraction window
+      if vrange is None:
+          # Original case: use a window of wavelength full width dwline
+          waves =  wavrest + np.array([-0.5, 0.5])*dwline
+      else:
+          # Extract velocity limits from the vrange command line argument
+          # vrange should be of a form like '-100+100' or '+020+030'
+          v1, v2 = float(vrange[:4]), float(vrange[-4:])
+          print('Velocity window:', v1, 'to', v2)
+          waves = vels2waves([v1, v2], wavrest,  spechdu.header)
+      print('Wavelength window: {:.2f} to {:.2f}'.format(*waves.to(u.Angstrom)))
+
+      # Find pixel indices for line extraction window
+      i1, i2 = waves2pixels(waves, wspec)
+      print('Pixel window:', i1, 'to', i2)
+
+      # Extract profile for this wavelength or velocity window
+      profile = spec2d[:, i1:i2:sgn].sum(axis=-1)
+
+      # Find celestial coordinates for each pixel along the slit
+      NS = len(profile)
+      slit_coords = pixel_to_skycoord(range(NS), [0]*NS, wspec, 0)
+
+      # Trim off bad parts of slit
+      profile = profile[goodslice]
+      slit_coords = slit_coords[goodslice]
+
+      # Convert to pixel coordinates in output image
+      xp, yp = skycoord_to_pixel(slit_coords, w, 0)
+
+      for x, y, bright in zip(xp, yp, profile):
+          # Find output pixels corresponding to corners of slit pixel
+          # (approximate as square)
+          i1 = int(0.5 + x - slit_pix_width/2)
+          i2 = int(0.5 + x + slit_pix_width/2)
+          j1 = int(0.5 + y - slit_pix_width/2)
+          j2 = int(0.5 + y + slit_pix_width/2)
+          # Make sure we don't go outside the output grid
+          i1, i2 = max(0, i1), max(0, i2)
+          i1, i2 = min(NX, i1), min(NX, i2)
+          j1, j2 = max(0, j1), max(0, j2)
+          j1, j2 = min(NY, j1), min(NY, j2)
+          # Fill in the square
+          outimage[j1:j2, i1:i2] += bright*slit_weight
+          outweights[j1:j2, i1:i2] += slit_weight
+
+  # Save everything as different images in a single fits file:
+  # 1. The sum of the raw slits 
+  # 2. The weights
+  # 3. The slits normalized by the weights
+  if vrange is None:
+      label = line_id + '-allvels'
+  else:
+      label = line_id + vrange
+
+  fits.HDUList([
+      fits.PrimaryHDU(),
+      fits.ImageHDU(header=w.to_header(), data=outimage, name='slits'),
+      fits.ImageHDU(header=w.to_header(), data=outweights, name='weight'),
+      fits.ImageHDU(header=w.to_header(), data=outimage/outweights, name='scaled'),
+      ]).writeto('owl-slits-{}.fits'.format(label), clobber=True)
+#+END_SRC
+
+#+RESULTS:
+: None
+
+** Run owl-spectral-map.py
+#+BEGIN_SRC sh :exports code :results verbatim
+python owl-spectral-map.py ha # 1>&2
+python owl-spectral-map.py nii # 1>&2
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Processing Calibrated/pos01-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos02-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos03-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos04-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos05-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos06-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos07-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos08-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos09-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos10-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos11-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos12-ha.fits
+Wavelength window: 6559.29 Angstrom to 6566.29 Angstrom
+Pixel window: 52.3403043162 to 212.332500916
+Processing Calibrated/pos01-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos02-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos03-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos04-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos05-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos06-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos07-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos08-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos09-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos10-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos11-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+Processing Calibrated/pos12-nii.fits
+Wavelength window: 6579.95 Angstrom to 6586.95 Angstrom
+Pixel window: 44.4295912004 to 203.920431407
+#+end_example
+
+#+BEGIN_SRC sh
+xpaset -p ds9 fits $PWD/owl-slits-ha-allvels.fits[3]
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC sh :results silent
+  redranges='+030+050 +010+030 -010+010'
+  # blueranges='-030-010 -050-030 -070-050'
+  # farblueranges='-090-070 -110-090 -130-110'
+  # for vrange in $redranges $blueranges $farblueranges; do
+  for vrange in $redranges; do
+      python owl-spectral-map.py ha $vrange
+      python owl-spectral-map.py nii $vrange
+  done
+#+END_SRC
+
+#+BEGIN_SRC sh :results silent
+xpaset -p ds9 rgb red
+xpaset -p ds9 fits $PWD/owl-slits-ha+030+050.fits[3]
+xpaset -p ds9 rgb green
+xpaset -p ds9 fits $PWD/owl-slits-ha+010+030.fits[3]
+xpaset -p ds9 rgb blue
+xpaset -p ds9 fits $PWD/owl-slits-ha-010+010.fits[3]
+#+END_SRC
+
+#+BEGIN_SRC sh :results silent
+xpaset -p ds9 rgb red
+xpaset -p ds9 fits $PWD/owl-slits-nii+030+050.fits[3]
+xpaset -p ds9 rgb green
+xpaset -p ds9 fits $PWD/owl-slits-nii+010+030.fits[3]
+xpaset -p ds9 rgb blue
+xpaset -p ds9 fits $PWD/owl-slits-nii-010+010.fits[3]
+#+END_SRC
+
+
+** Multibinning of spectral maps
+#+BEGIN_SRC sh :results verbatim
+mdir=/Users/will/Dropbox/OrionWest
+python $mdir/multibin-map.py owl-slits-nii-allvels.fits
+#+END_SRC
+
+#+RESULTS:
+: Saving owl-slits-nii-allvels-bin001.fits
+: Saving owl-slits-nii-allvels-bin002.fits
+: Saving owl-slits-nii-allvels-bin004.fits
+: Saving owl-slits-nii-allvels-bin008.fits
+: Saving owl-slits-nii-allvels-bin016.fits
+: Saving owl-slits-nii-allvels-bin032.fits
+: Saving owl-slits-nii-allvels-bin064.fits
+
+#+BEGIN_SRC sh :results silent
+mdir=/Users/will/Dropbox/OrionWest
+redranges='+030+050 +010+030 -010+010'
+for vrange in $redranges; do
+    python $mdir/multibin-map.py owl-slits-ha$vrange.fits
+    python $mdir/multibin-map.py owl-slits-nii$vrange.fits
+done
+#+END_SRC
+
+#+BEGIN_SRC sh :results silent
+suff=bin032
+xpaset -p ds9 rgb red
+xpaset -p ds9 fits $PWD/owl-slits-nii+030+050-$suff.fits
+xpaset -p ds9 rgb green
+xpaset -p ds9 fits $PWD/owl-slits-nii+010+030-$suff.fits
+xpaset -p ds9 rgb blue
+xpaset -p ds9 fits $PWD/owl-slits-nii-010+010-$suff.fits
+xpaset -p ds9 frame prev
+xpaset -p ds9 match frame wcs
+xpaset -p ds9 frame next
+#+END_SRC
+
+#+BEGIN_SRC sh :results silent
+suff=bin032
+xpaset -p ds9 rgb red
+xpaset -p ds9 fits $PWD/owl-slits-ha+030+050-$suff.fits
+xpaset -p ds9 rgb green
+xpaset -p ds9 fits $PWD/owl-slits-ha+010+030-$suff.fits
+xpaset -p ds9 rgb blue
+xpaset -p ds9 fits $PWD/owl-slits-ha-010+010-$suff.fits
+xpaset -p ds9 frame prev
+xpaset -p ds9 match frame wcs
+xpaset -p ds9 frame next
+#+END_SRC
+
+
+** Combining multibinned maps
++ Copied from [[id:3796710F-B02D-47F2-9B7C-7FD0DEE62434][Program to combine different grids: multibin-combine.py]]
+
+#+BEGIN_SRC python :tangle owl-multibin-combine.py
+  import sys
+  from astropy.io import fits
+  import numpy as np
+  sys.path.append('/Users/will/Work/RubinWFC3/Tsquared')
+  from rebin_utils import oversample
+  from skimage.morphology import square
+  from skimage.filters.rank import modal
+
+
+  def minify(a, n):
+      return a[::n, ::n]
+
+
+  ELEMENT = square(3)
+  def cleanup_mask(mask, n):
+      """Eliminate small islands in the mask"""
+      m = minify(mask, n).astype(np.uint8)
+      m = m & modal(m, ELEMENT)
+      return oversample(m, n).astype(bool)
+
+      
+  try: 
+      prefix, minw_scale = sys.argv[1], float(sys.argv[2])
+  except:
+      print('Usage:', sys.argv[0], 'FITSFILE_PREFIX MINIMUM_WEIGHT [COARSE_WEIGHT]')
+      sys.exit()
+
+  try:
+      minw_coarse = float(sys.argv[3])
+  except IndexError:
+      minw_coarse = None
+
+  nlist = [1, 2, 4, 8, 16, 32, 64]
+  minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
+  if minw_coarse is not None:
+      minweights[-1] = minw_coarse
+  outim = np.zeros((512, 512))
+  for n, minw in reversed(list(zip(nlist, minweights))):
+      fn = '{}-bin{:03d}.fits'.format(prefix, n)
+      hdulist = fits.open(fn)
+      im = hdulist['scaled'].data
+      hdr = hdulist['scaled'].header
+      w = hdulist['weight'].data
+      m = cleanup_mask(w*im >= minw*minw_scale, n)
+      outim[m] = im[m]
+  fits.PrimaryHDU(header=hdr, data=outim).writeto(prefix + '-multibin.fits', clobber=True)
+#+END_SRC
+
+
+#+BEGIN_SRC sh :results verbatim
+ranges='+030+050 +010+030 -010+010 -allvels'
+for vrange in $ranges; do
+    python owl-multibin-combine.py owl-slits-ha$vrange 1e2 0.0
+    python owl-multibin-combine.py owl-slits-nii$vrange 1e2 0.0
+done
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC sh :results silent
+suff=multibin
+xpaset -p ds9 rgb red
+xpaset -p ds9 fits $PWD/owl-slits-ha+030+050-$suff.fits
+xpaset -p ds9 rgb green
+xpaset -p ds9 fits $PWD/owl-slits-ha+010+030-$suff.fits
+xpaset -p ds9 rgb blue
+xpaset -p ds9 fits $PWD/owl-slits-ha-010+010-$suff.fits
+sleep 2
+xpaset -p ds9 frame prev
+xpaset -p ds9 match frame wcs
+xpaset -p ds9 frame next
+#+END_SRC
+
+#+BEGIN_SRC sh :results silent
+suff=multibin
+xpaset -p ds9 rgb red
+xpaset -p ds9 fits $PWD/owl-slits-nii+030+050-$suff.fits
+xpaset -p ds9 rgb green                     
+xpaset -p ds9 fits $PWD/owl-slits-nii+010+030-$suff.fits
+xpaset -p ds9 rgb blue                      
+xpaset -p ds9 fits $PWD/owl-slits-nii-010+010-$suff.fits
+sleep 2
+xpaset -p ds9 frame prev
+xpaset -p ds9 match frame wcs
+xpaset -p ds9 frame next
+#+END_SRC
+
 ** More tables
 
 *** [N II] spectra
@@ -201,20 +1089,20 @@ time python medianize_images.py
 :TABLE_EXPORT_FILE: spectra-nii.tab
 :TABLE_EXPORT_FORMAT: orgtbl-to-tsv
 :END:
-|          |      RA |     Dec |  helio |  NX |  NY | xpixscale | jcenter | file                 |
-|----------+---------+---------+--------+-----+-----+-----------+---------+----------------------|
-| north988 |  2.8104 |  98.784 |  -2.63 | 625 | 300 |      0.53 |     382 | spec213-nii.fits     |
-| north809 |  2.7384 |  80.892 |  -2.61 | 625 | 300 |     0.531 |     382 | spec209-nii.fits     |
-| north612 |  2.6688 |    61.2 |  -2.59 | 625 | 300 |     0.528 |     382 | spec206-nii.fits     |
-| north413 |  2.5464 |  41.364 |  -2.56 | 625 | 300 |     0.532 |     382 | spec203-nii.fits     |
-| north195 |  1.7424 |  19.584 |   -2.5 | 300 | 625 |     0.529 |     382 | spec199-nii.fits     |
-| south061 | -0.3984 |  -0.612 | -19.65 | 512 | 300 |     0.637 |     300 | spec058-nii-rot.fits |
-| south177 |  0.1128 | -17.748 |  -2.85 | 625 | 300 |     0.522 |     382 | spec314-nii.fits     |
-| south380 | -0.4344 | -38.016 | -19.62 | 512 | 300 |     0.619 |     299 | spec055-nii-rot.fits |
-| south504 |     0.3 | -50.436 |  -2.88 | 625 | 300 |     0.527 |     382 | spec318-nii.fits     |
-| south662 |  0.2184 |  -66.24 |   -2.9 | 625 | 300 |     0.525 |     382 | spec321-nii.fits     |
-| south821 |    0.36 | -82.152 |  -2.93 | 625 | 300 |     0.525 |     382 | spec324-nii.fits     |
-| south942 |  0.1824 | -94.176 |  -2.96 | 625 | 300 |     0.525 |     382 | spec339-nii.fits     |
+| pos   |      RA |     Dec |  helio |  NX |  NY | xpixscale | jcenter | file             |
+|-------+---------+---------+--------+-----+-----+-----------+---------+------------------|
+| pos01 |  2.8104 |  98.784 |  -2.63 | 625 | 300 |      0.53 |     382 | spec213-nii.fits |
+| pos02 |  2.7384 |  80.892 |  -2.61 | 625 | 300 |     0.531 |     382 | spec209-nii.fits |
+| pos03 |  2.6688 |    61.2 |  -2.59 | 625 | 300 |     0.528 |     382 | spec206-nii.fits |
+| pos04 |  2.5464 |  41.364 |  -2.56 | 625 | 300 |     0.532 |     382 | spec203-nii.fits |
+| pos05 |  1.7424 |  19.584 |   -2.5 | 300 | 625 |     0.529 |     382 | spec199-nii.fits |
+| pos06 | -0.3984 |  -0.612 | -19.65 | 512 | 300 |     0.637 |     300 | spec058-nii.fits |
+| pos07 |  0.1128 | -17.748 |  -2.85 | 625 | 300 |     0.522 |     382 | spec314-nii.fits |
+| pos08 | -0.4344 | -38.016 | -19.62 | 512 | 300 |     0.619 |     299 | spec055-nii.fits |
+| pos09 |     0.3 | -50.436 |  -2.88 | 625 | 300 |     0.527 |     382 | spec318-nii.fits |
+| pos10 |  0.2184 |  -66.24 |   -2.9 | 625 | 300 |     0.525 |     382 | spec321-nii.fits |
+| pos11 |    0.36 | -82.152 |  -2.93 | 625 | 300 |     0.525 |     382 | spec324-nii.fits |
+| pos12 |  0.1824 | -94.176 |  -2.96 | 625 | 300 |     0.525 |     382 | spec339-nii.fits |
 
 + Imported from [[file:~/Dropbox/Papers/LL-Objects/NGC3587/SPMnii/star-nii.csv]]
 + Constant columns removed:
@@ -235,20 +1123,20 @@ time python medianize_images.py
 :TABLE_EXPORT_FILE: spectra-ha.tab
 :TABLE_EXPORT_FORMAT: orgtbl-to-tsv
 :END:
-|          |      RA |     Dec |  helio |  NX |  NY | xpixscale | jcenter | file                |
-|----------+---------+---------+--------+-----+-----+-----------+---------+---------------------|
-| north988 |  2.8104 |  98.784 |  -2.63 | 625 | 300 |      0.53 |     382 | spec213-ha.fits     |
-| north809 |  2.7384 |  80.892 |  -2.61 | 625 | 300 |     0.531 |     382 | spec209-ha.fits     |
-| north612 |  2.6688 |    61.2 |  -2.59 | 625 | 300 |     0.528 |     382 | spec206-ha.fits     |
-| north413 |  2.5464 |  41.364 |  -2.56 | 625 | 300 |     0.532 |     382 | spec203-ha.fits     |
-| north195 |  1.7424 |  19.584 |   -2.5 | 625 | 300 |     0.529 |     382 | spec199-ha.fits     |
-| south061 | -0.3984 |  -0.612 | -19.65 | 512 | 300 |     0.637 |     300 | spec058-ha-rot.fits |
-| south177 |  0.1128 | -17.748 |  -2.85 | 625 | 300 |     0.522 |     382 | spec314-ha.fits     |
-| south380 | -0.4344 | -38.016 | -19.62 | 512 | 300 |     0.619 |     299 | spec055-ha-rot.fits |
-| south504 |     0.3 | -50.436 |  -2.88 | 625 | 300 |     0.527 |     382 | spec318-ha.fits     |
-| south662 |  0.2184 |  -66.24 |   -2.9 | 625 | 300 |     0.525 |     382 | spec321-ha.fits     |
-| south821 |    0.36 | -82.152 |  -2.93 | 625 | 300 |     0.525 |     382 | spec324-ha.fits     |
-| south942 |  0.1824 | -94.176 |  -2.96 | 625 | 300 |     0.525 |     382 | spec339-ha.fits     |
+|          |      RA |     Dec |  helio |  NX |  NY | xpixscale | jcenter | file            |
+|----------+---------+---------+--------+-----+-----+-----------+---------+-----------------|
+| north988 |  2.8104 |  98.784 |  -2.63 | 625 | 300 |      0.53 |     382 | spec213-ha.fits |
+| north809 |  2.7384 |  80.892 |  -2.61 | 625 | 300 |     0.531 |     382 | spec209-ha.fits |
+| north612 |  2.6688 |    61.2 |  -2.59 | 625 | 300 |     0.528 |     382 | spec206-ha.fits |
+| north413 |  2.5464 |  41.364 |  -2.56 | 625 | 300 |     0.532 |     382 | spec203-ha.fits |
+| north195 |  1.7424 |  19.584 |   -2.5 | 625 | 300 |     0.529 |     382 | spec199-ha.fits |
+| south061 | -0.3984 |  -0.612 | -19.65 | 512 | 300 |     0.637 |     300 | spec058-ha.fits |
+| south177 |  0.1128 | -17.748 |  -2.85 | 625 | 300 |     0.522 |     382 | spec314-ha.fits |
+| south380 | -0.4344 | -38.016 | -19.62 | 512 | 300 |     0.619 |     299 | spec055-ha.fits |
+| south504 |     0.3 | -50.436 |  -2.88 | 625 | 300 |     0.527 |     382 | spec318-ha.fits |
+| south662 |  0.2184 |  -66.24 |   -2.9 | 625 | 300 |     0.525 |     382 | spec321-ha.fits |
+| south821 |    0.36 | -82.152 |  -2.93 | 625 | 300 |     0.525 |     382 | spec324-ha.fits |
+| south942 |  0.1824 | -94.176 |  -2.96 | 625 | 300 |     0.525 |     382 | spec339-ha.fits |
 
 + Constant columns removed:
   + lamrest :: 6562.82
