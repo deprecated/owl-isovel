@@ -427,6 +427,33 @@ time python medianize_images.py
 #+END_SRC
 
 #+RESULTS:
+* DONE Remove halo from median image
+CLOSED: [2016-08-18 Thu 12:31]
++ We have problems with establishing the zero point because of uncertainties in the bias
+  + This causes errors in the photometric calibration for some slits
++ The easiest way to resolve this is to subtract off the emission from the halo from both the reference image and the spectra
+  + Here we do it for the reference image
+
+#+BEGIN_SRC python :tangle owl-sub-halo.py
+  import numpy as np
+  from astropy.io import fits
+
+  MARGIN = 20
+  FILENAME = 'imslit-median.fits'
+  hdu, = fits.open(FILENAME)
+  left_profile = hdu.data[:, :MARGIN].mean(axis=1, keepdims=True)
+  right_profile = hdu.data[:, -MARGIN:].mean(axis=1, keepdims=True)
+  halo_profile = 0.5*(left_profile + right_profile)
+  hdu.data -= halo_profile
+
+  hdu.writeto(FILENAME.replace('.fits', '-sub.fits'), clobber=True)
+
+#+END_SRC
+
+#+BEGIN_SRC sh :results silent
+python owl-sub-halo.py
+#+END_SRC
+
 * Generate the PV images
 ** Table of slit positions on image+slit
 :PROPERTIES:
@@ -461,6 +488,16 @@ CLOSED: [2016-08-16 Tue 22:05]
 :PROPERTIES:
 :header-args: :tangle owl-slit-calibrate.py :comments link
 :END:
+
++ Total filter width is 90 A supposedly
++ Each extracted line is about 13.1 A wide
++ So extracted continuum needs to be multiplied by 90 / (13.1 + 13.1) = 3.4
+
+#+BEGIN_SRC sh
+open -n -a SAOImage\ DS9 --args -title spectra
+#+END_SRC
+
+#+RESULTS:
 
 #+BEGIN_SRC python
   import os
@@ -583,7 +620,7 @@ CLOSED: [2016-08-16 Tue 22:05]
 
 
       # Make a fake Ha+[N II] line (really should add continuum too)
-      spec_profile = (ha_profile+1.333*nii_profile) + 0.05*(ha_bg + 2*nii_bg)
+      spec_profile = (ha_profile+1.333*nii_profile) + 3.4*(ha_bg + nii_bg)
       # Zeroth order approximation to calibration
       rat0 = np.nansum(spec_profile)/np.nansum(calib_profile)
       print('Coarse calibration: ratio =', rat0)
@@ -634,7 +671,7 @@ CLOSED: [2016-08-16 Tue 22:05]
           # hdu.header.update(fixup4ds9(wslit).to_header(key=' '))
           calibfile = 'Calibrated/{}-{}.fits'.format(row['pos_nii'], lineid)
           hdu.writeto(calibfile, clobber=True)
-      
+    
 #+END_SRC
 *** Run the program
 #+BEGIN_SRC sh :tangle no :results verbatim
@@ -677,6 +714,11 @@ for fn in speclist:
 | pos10-ha | 2013-02-19 | 56342.0 | 13:39:28 | 11:15:26.5 | 54:55:34.0 |  2.74 |
 | pos11-ha | 2013-02-19 | 56342.0 | 14:02:54 | 11:15:26.0 | 54:55:20.0 |  2.76 |
 | pos12-ha | 2013-02-19 | 56342.0 | 14:32:57 | 11:15:25.7 | 54:55:13.0 |  2.78 |
+** TODO [1/3] Improvements to spectral maps
++ [X] Increase width of projected slit
++ [ ] Use median image to fake the vertical profile across an artificially wide slit
++ [ ] Finesse the flux calibration of slits 04 and 07
+  + Although they aren't the ones that look particularly bad
 
 ** DONE Construct spectral maps
 CLOSED: [2016-08-16 Tue 23:23]
