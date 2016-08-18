@@ -727,7 +727,7 @@ CLOSED: [2016-08-16 Tue 23:23]
   outimage = np.zeros((NY, NX))
   outweights = np.zeros((NY, NX))
 
-  slit_width = 2.0                # width in arcsec of 150 micron slit
+  slit_width = 8.0                # width in arcsec of 150 micron slit
   slit_pix_width = slit_width/pixel_scale
 
   speclist = glob.glob('Calibrated/*-{}.fits'.format(line_id))
@@ -910,12 +910,18 @@ xpaset -p ds9 fits $PWD/owl-slits-ha-allvels.fits[3]
 
 #+RESULTS:
 
+#+BEGIN_SRC sh
+xpaset -p ds9 fits $PWD/owl-slits-ha-allvels.fits[2]
+#+END_SRC
+
+#+RESULTS:
+
 #+BEGIN_SRC sh :results silent
-  redranges='+030+050 +010+030 -010+010'
+  ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
   # blueranges='-030-010 -050-030 -070-050'
   # farblueranges='-090-070 -110-090 -130-110'
   # for vrange in $redranges $blueranges $farblueranges; do
-  for vrange in $redranges; do
+  for vrange in $ranges; do
       python owl-spectral-map.py ha $vrange
       python owl-spectral-map.py nii $vrange
   done
@@ -939,28 +945,108 @@ xpaset -p ds9 rgb blue
 xpaset -p ds9 fits $PWD/owl-slits-nii-010+010.fits[3]
 #+END_SRC
 
+** DONE Use the median image to mask edge of spectral maps
+CLOSED: [2016-08-17 Wed 23:21]
++ We have no slits outside of the object
++ Which means there is no data to stop the multibinning from bleeding flux towards the outside
++ It might help to add a low-intensity background to our channel map in the areas outside the main nebula shell
+  + Construct a mask based on a contour of the median image
+  + S < 0.15 looks like it will work well, so long as we first do a Gaussian smoothing of about 5 pixels width
++ We can use the actual brightness map in the masked region and scale it to the same average brightness as is is seen in the masked region of the slits in that isovel channel
++ We will call this process /debleeding/, since it prevents the bleeding of flux into areas outside the boundary of the bright shell
+
+#+BEGIN_SRC python :tangle owl-debleed-map.py
+  import sys
+  import numpy as np
+  from astropy.io import fits
+  from astropy.convolution import convolve_fft, Gaussian2DKernel
+
+  try:
+      suffix = sys.argv[1]
+  except IndexError:
+      print('Usage: {} SUFFIX'.format(sys.argv[0]))
+
+  slit_hdus = fits.open('owl-slits-{}.fits'.format(suffix))
+  slit_wt = slit_hdus['weight'].data
+  slit_im_wt = slit_hdus['slits'].data
+  slit_im = slit_hdus['scaled'].data
+
+  imhdu, = fits.open('imslit-median.fits')
+
+  # Make BG mask by smoothing and thresholding
+  gauss_kernel = Gaussian2DKernel(5)
+  im_smooth = convolve_fft(imhdu.data, gauss_kernel)
+  bgmask = im_smooth < 0.15
+  median_bg = np.median(imhdu.data[bgmask])
+  # Arbitrary weight for the new bg pixels, similar to slit weights
+  bgwt = 3000
+
+  # Find slit mask
+  slit_mask = slit_wt > 0.0
+  median_slit_bg = np.median(slit_im[slit_mask & bgmask])
+
+  # Add scaled BG to multislit image, but only in between slits
+  fill_mask = (~slit_mask) & bgmask
+  slit_im_wt[fill_mask] = bgwt*(median_slit_bg/median_bg)*imhdu.data[fill_mask]
+  slit_wt[fill_mask] = bgwt
+
+  slit_hdus['slits'].data = slit_im_wt
+  slit_hdus['weight'].data = slit_wt
+  slit_hdus['scaled'].data = slit_im_wt/slit_wt
+  slit_hdus.writeto('owl-dslits-{}.fits'.format(suffix), clobber=True)
+
+
+
+#+END_SRC 
+
+#+BEGIN_SRC sh :results verbatim
+python owl-debleed-map.py nii-allvels
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC sh
+xpaset -p ds9 fits $PWD/owl-dslits-ha-allvels.fits[3]
+#+END_SRC
+
+#+RESULTS:
+
+#+BEGIN_SRC sh :results silent
+  ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
+  for line in ha nii; do
+      for chan in $ranges -allvels; do
+          python owl-debleed-map.py ${line}${chan}
+      done
+  done
+#+END_SRC
+
+#+BEGIN_SRC sh
+xpaset -p ds9 fits $PWD/owl-dslits-nii+030+050.fits[3]
+#+END_SRC
+
+#+RESULTS:
 
 ** Multibinning of spectral maps
 #+BEGIN_SRC sh :results verbatim
 mdir=/Users/will/Dropbox/OrionWest
-python $mdir/multibin-map.py owl-slits-nii-allvels.fits
+python $mdir/multibin-map.py owl-dslits-ha-allvels.fits
 #+END_SRC
 
 #+RESULTS:
-: Saving owl-slits-nii-allvels-bin001.fits
-: Saving owl-slits-nii-allvels-bin002.fits
-: Saving owl-slits-nii-allvels-bin004.fits
-: Saving owl-slits-nii-allvels-bin008.fits
-: Saving owl-slits-nii-allvels-bin016.fits
-: Saving owl-slits-nii-allvels-bin032.fits
-: Saving owl-slits-nii-allvels-bin064.fits
+: Saving owl-dslits-ha-allvels-bin001.fits
+: Saving owl-dslits-ha-allvels-bin002.fits
+: Saving owl-dslits-ha-allvels-bin004.fits
+: Saving owl-dslits-ha-allvels-bin008.fits
+: Saving owl-dslits-ha-allvels-bin016.fits
+: Saving owl-dslits-ha-allvels-bin032.fits
+: Saving owl-dslits-ha-allvels-bin064.fits
 
 #+BEGIN_SRC sh :results silent
 mdir=/Users/will/Dropbox/OrionWest
-redranges='+030+050 +010+030 -010+010'
-for vrange in $redranges; do
-    python $mdir/multibin-map.py owl-slits-ha$vrange.fits
-    python $mdir/multibin-map.py owl-slits-nii$vrange.fits
+ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
+for vrange in $ranges -allvels; do
+    python $mdir/multibin-map.py owl-dslits-ha$vrange.fits
+    python $mdir/multibin-map.py owl-dslits-nii$vrange.fits
 done
 #+END_SRC
 
@@ -1027,8 +1113,8 @@ xpaset -p ds9 frame next
   except IndexError:
       minw_coarse = None
 
-  nlist = [1, 2, 4, 8, 16, 32, 64]
-  minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
+  nlist = [1, 2, 4, 8, 16, 32]
+  minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0]
   if minw_coarse is not None:
       minweights[-1] = minw_coarse
   outim = np.zeros((512, 512))
@@ -1044,15 +1130,13 @@ xpaset -p ds9 frame next
 #+END_SRC
 
 
-#+BEGIN_SRC sh :results verbatim
-ranges='+030+050 +010+030 -010+010 -allvels'
-for vrange in $ranges; do
-    python owl-multibin-combine.py owl-slits-ha$vrange 1e2 0.0
-    python owl-multibin-combine.py owl-slits-nii$vrange 1e2 0.0
+#+BEGIN_SRC sh :results silent
+ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
+for vrange in $ranges -allvels; do
+    python owl-multibin-combine.py owl-dslits-ha$vrange 0.0001 0.0
+    python owl-multibin-combine.py owl-dslits-nii$vrange 0.0001 0.0
 done
 #+END_SRC
-
-#+RESULTS:
 
 #+BEGIN_SRC sh :results silent
 suff=multibin

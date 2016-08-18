@@ -30,8 +30,8 @@ try:
 except IndexError:
     minw_coarse = None
 
-nlist = [1, 2, 4, 8, 16, 32, 64]
-minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
+nlist = [1, 2, 4, 8, 16, 32]
+minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0]
 if minw_coarse is not None:
     minweights[-1] = minw_coarse
 outim = np.zeros((512, 512))

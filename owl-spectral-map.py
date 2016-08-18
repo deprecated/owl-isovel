@@ -40,7 +40,7 @@ w.wcs.cunit = ['deg', 'deg']
 outimage = np.zeros((NY, NX))
 outweights = np.zeros((NY, NX))
 
-slit_width = 2.0                # width in arcsec of 150 micron slit
+slit_width = 8.0                # width in arcsec of 150 micron slit
 slit_pix_width = slit_width/pixel_scale
 
 speclist = glob.glob('Calibrated/*-{}.fits'.format(line_id))
