@@ -13,12 +13,12 @@ slit_wt = slit_hdus['weight'].data
 slit_im_wt = slit_hdus['slits'].data
 slit_im = slit_hdus['scaled'].data
 
-imhdu, = fits.open('imslit-median.fits')
+imhdu, = fits.open('imslit-median-sub.fits')
 
 # Make BG mask by smoothing and thresholding
 gauss_kernel = Gaussian2DKernel(5)
 im_smooth = convolve_fft(imhdu.data, gauss_kernel)
-bgmask = im_smooth < 0.15
+bgmask = im_smooth < 0.05
 median_bg = np.median(imhdu.data[bgmask])
 # Arbitrary weight for the new bg pixels, similar to slit weights
 bgwt = 3000

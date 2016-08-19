@@ -30,8 +30,8 @@ try:
 except IndexError:
     minw_coarse = None
 
-nlist = [1, 2, 4, 8, 16, 32]
-minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0]
+nlist = [1, 2, 4, 8, 16, 32, 64]
+minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
 if minw_coarse is not None:
     minweights[-1] = minw_coarse
 outim = np.zeros((512, 512))
@@ -41,6 +41,7 @@ for n, minw in reversed(list(zip(nlist, minweights))):
     im = hdulist['scaled'].data
     hdr = hdulist['scaled'].header
     w = hdulist['weight'].data
-    m = cleanup_mask(w*im >= minw*minw_scale, n)
+    # m = cleanup_mask(w*im >= minw*minw_scale, n)
+    m = np.isfinite(w) & (w > 0.0) & np.isfinite(im) & (im > 0.0)
     outim[m] = im[m]
 fits.PrimaryHDU(header=hdr, data=outim).writeto(prefix + '-multibin.fits', clobber=True)

@@ -1,4 +1,4 @@
-# [[file:teresa-owl.org::*Program%20owl-slit-calibrate.py][Program\ owl-slit-calibrate\.py:1]]
+# [[file:teresa-owl.org::*%20Program%20owl-slit-calibrate.py][\[2/3\]\ Program\ owl-slit-calibrate\.py:1]]
 import os
 import sys
 import numpy as np
@@ -16,6 +16,9 @@ from owl_utils import (DATADIR, slit_profile, extract_profile,
                        find_slit_coords, make_slit_wcs, remove_bg_and_regularize)
 
 restwavs = {'ha': 6562.79, 'nii': 6583.45}
+
+# Position of star
+RA0, Dec0 = 168.69895, 55.019147
 
 def fit_cheb(x, y, npoly=3, mask=None):
     """Fits a Chebyshev poly to y(x) and returns fitted y-values"""
@@ -41,7 +44,7 @@ def make_three_plots(spec, calib, prefix, niirat=None):
     if niirat is not None:
         niirat = niirat[m]
 
-    vmin, vmax = 0.0, np.percentile(calib, 95) + 4*calib.std()
+    vmin, vmax = -0.1, np.percentile(calib, 95) + 2*calib.std()
     ratio = spec/calib
     mask = (spec > np.percentile(spec, 25)) & (ratio > 0.5) & (ratio < 2.0)
     # mask = (ypix > 10.0) & (ypix < ypix.max() - 10.0) \
@@ -99,14 +102,17 @@ slittab = Table.read('slit-positions.tab', format='ascii.tab')
 table = hstack([hatab, niitab, imtab, slittab],
                table_names=['ha', 'nii', 'im', 'slit'])
 # Photometric reference image
-photom, = fits.open('imslit-median.fits')
+photom, = fits.open('imslit-median-sub.fits')
 wphot = WCS(photom.header)
 
+nii_ha_dict = {'radius': [], 'ratio': [], 'weight': []}
 for row in table:
     ha_hdu, = fits.open(DATADIR +'/SPMha/' + row['file_ha'])
     nii_hdu, = fits.open(DATADIR +'/SPMnii/' + row['file_nii'])
     im_hdu, = fits.open(DATADIR +'/' + row['filename'])
     im_hdu.header.remove('@EPOCH')
+
+
 
     slit_coords = find_slit_coords(row, im_hdu.header, ha_hdu.header)
     calib_profile = slit_profile(slit_coords['RA'], slit_coords['Dec'],
@@ -119,7 +125,7 @@ for row in table:
 
 
     # Make a fake Ha+[N II] line (really should add continuum too)
-    spec_profile = (ha_profile+1.333*nii_profile) + 0.05*(ha_bg + 2*nii_bg)
+    spec_profile = (ha_profile+1.333*nii_profile) # + 3.4*(ha_bg + nii_bg)
     # Zeroth order approximation to calibration
     rat0 = np.nansum(spec_profile)/np.nansum(calib_profile)
     print('Coarse calibration: ratio =', rat0)
@@ -128,6 +134,13 @@ for row in table:
     plt_prefix = '{:03d}-calib'.format(row.index+1)
     ratio = make_three_plots(spec_profile, calib_profile,
                              plt_prefix, niirat=nii_profile/ha_profile)
+
+    nii_ha_dict['radius'].extend(
+        np.hypot(slit_coords['RA'] - RA0, slit_coords['Dec'] - Dec0)*3600
+    )
+    nii_ha_dict['ratio'].extend(nii_profile/ha_profile)
+    nii_ha_dict['weight'].extend(spec_profile)
+
 
     # Save calibrated spectra to files
     for lineid, hdu in [['ha', ha_hdu], ['nii', nii_hdu]]:
@@ -170,4 +183,8 @@ for row in table:
         # hdu.header.update(fixup4ds9(wslit).to_header(key=' '))
         calibfile = 'Calibrated/{}-{}.fits'.format(row['pos_nii'], lineid)
         hdu.writeto(calibfile, clobber=True)
-# Program\ owl-slit-calibrate\.py:1 ends here
+
+
+# Now do something with that nii/ha versus radius data
+Table(nii_ha_dict).write('owl-nii-ha-ratio.tab', format='ascii.tab')
+# \[2/3\]\ Program\ owl-slit-calibrate\.py:1 ends here

@@ -10,6 +10,28 @@
 
 
 * Making velocity maps from Teresa's Owl data
+
+** About the Owl
+
+*** Color image
++ [[file:M97.jpg]]
++ From http://www.capella-observatory.com/ImageHTMLs/PNs/M97.htm
+  #+BEGIN_QUOTE
+  About this Image / Über dieses Bild
+CCD:	SBIG STL 11000M and Andor DZ 436 (only for H-beta files, 2048 x 2048 pixel)
+Image Type, Orientation:	H-alpha, H-beta, OIII-composite + RGB- composite for the stars, North is at 12:00h
+Exposure time:	H-alpha: 5x1200 sec., H-beta: 5x1200 sec., OIII: 5x1200 sec., R,G,B: 5x120 sec., all 1x1 bin
+Exposure date:	
+June 2012
+
+Location:	Skinakas Observatory at Crete, Greece
+Filter:	
+H-alpha (6nm) and OIII (12nm) filter by Astronomik, H-beta filter (3nm) by Spectrofilm
+
+Instrument:	Skinakas "Main" Telescope - Modified RC-129 cm-Telescope in secondary focus (9970 mm)
+Photographer:	Makis Palaiologou, Stefan Binnewies, Josef Pöpsel
+Seeing (FWHM):	0.95"(G and R)...1.50" (OIII and H-beta)
+  #+END_QUOTE
 ** Plan of action
 *** First deal with the image + slit
 + Make a nice median image
@@ -18,6 +40,17 @@
     + See [[file:owl-all-radec-images.bck]]
   + Take a median of each pixel, which should remove the slit parts
   + Then divide each image by the median image to get the slit profile
+* TODO Making the final figures
++ Use Aplpy to do isovel panels
+  + grayscale or viridis?
+  + grid layout?
+    + We have 13 channels and 2 lines
+** owl-isovel-figs.py
+#+BEGIN_SRC python :tangle owl-isovel-figs.py
+
+
+#+END_SRC
+
 * Utility functions
 :PROPERTIES:
 :header-args: :tangle owl_utils.py
@@ -232,14 +265,24 @@ def make_slit_wcs(db, slit_coords, spechdu):
       return slice(min(i1, i2), max(i1, i2))
 
 
-  def remove_bg_and_regularize(data, wcs, wavrest, db, dwbg_in=7.0, dwbg_out=10.0):
+  def remove_bg_and_regularize(data, wcs, wavrest, db,
+                               dwbg_in=7.0, dwbg_out=10.0,
+                               margin=20):
       '''
       Transpose data if necessary, and then subtract off the background (blue and red of line)
+
+      Also, remove average profile from ends of the slit if `margin` is set
       '''
       isT = db['saxis'] == 1
       # Make sure array axis order is (position, wavelength)
       if isT:
           data = data.T
+
+      # Optionally remove average of strips from ends of slit
+      if margin is not None:
+         marg1 = data[:margin, :].mean(axis=0, keepdims=True)
+         marg2 = data[-margin:, :].mean(axis=0, keepdims=True)
+         data -= 0.5*(marg1 + marg2)
       # pixel limits for blue, red bg extraction
       bslice = wavs2slice([wavrest-dwbg_out/2, wavrest-dwbg_in/2], wcs, db)
       rslice = wavs2slice([wavrest+dwbg_in/2, wavrest+dwbg_out/2], wcs, db)
@@ -467,15 +510,15 @@ python owl-sub-halo.py
 |  01 |     1 |   330 |   -50 |
 |  02 |     1 |   333 |   -47 |
 |  03 |     1 |   335 |   -50 |
-|  04 |     1 |   340 |   -47 |
+|  04 |     1 |   340 |   -50 |
 |  05 |     1 |   345 |   -45 |
-|  06 |     2 |   322 |    45 |
-|  07 |     1 |   344 |   -45 |
+|  06 |     2 |   322 |    47 |
+|  07 |     1 |   344 |   -40 |
 |  08 |     2 |   322 |    45 |
-|  09 |     1 |   342 |   -45 |
-|  10 |     1 |   341 |   -50 |
+|  09 |     1 |   342 |   -47 |
+|  10 |     1 |   341 |   -45 |
 |  11 |     1 |   339 |   -50 |
-|  12 |     1 |   339 |   -50 |
+|  12 |     1 |   339 |   -46 |
 
 
 
@@ -484,14 +527,21 @@ CLOSED: [2016-08-16 Tue 22:05]
 + It would probably be best to do this first
 + As well as flux calibrating, it will also determine the offsets along the slit
 + And adds WCS info to the slits
-*** Program owl-slit-calibrate.py
+*** TODO [2/3] Program owl-slit-calibrate.py
 :PROPERTIES:
 :header-args: :tangle owl-slit-calibrate.py :comments link
 :END:
 
-+ Total filter width is 90 A supposedly
-+ Each extracted line is about 13.1 A wide
-+ So extracted continuum needs to be multiplied by 90 / (13.1 + 13.1) = 3.4
++ [X] Subtracting off the halo
+  + We use 20 pixel margins left and right, just like we did for te median image
++ [X] Dealing with the continuum
+  + Total filter width is 90 A supposedly
+  + Each extracted line is about 13.1 A wide
+  + So extracted continuum needs to be multiplied by 90 / (13.1 + 13.1) = 3.4
+  + Hopefully, this will work better now that we are subtracting the halo
+  + CANCELLED something seriously wrong with this, but the continuum is so weak that it can be safely ignored
++ [ ] Save the nii/ha ratio as function of radius
+  + position of star: 168.69895 55.019147
 
 #+BEGIN_SRC sh
 open -n -a SAOImage\ DS9 --args -title spectra
@@ -518,6 +568,9 @@ open -n -a SAOImage\ DS9 --args -title spectra
 
   restwavs = {'ha': 6562.79, 'nii': 6583.45}
 
+  # Position of star
+  RA0, Dec0 = 168.69895, 55.019147
+
   def fit_cheb(x, y, npoly=3, mask=None):
       """Fits a Chebyshev poly to y(x) and returns fitted y-values"""
       fitter = fitting.LinearLSQFitter()
@@ -542,7 +595,7 @@ open -n -a SAOImage\ DS9 --args -title spectra
       if niirat is not None:
           niirat = niirat[m]
 
-      vmin, vmax = 0.0, np.percentile(calib, 95) + 4*calib.std()
+      vmin, vmax = -0.1, np.percentile(calib, 95) + 2*calib.std()
       ratio = spec/calib
       mask = (spec > np.percentile(spec, 25)) & (ratio > 0.5) & (ratio < 2.0)
       # mask = (ypix > 10.0) & (ypix < ypix.max() - 10.0) \
@@ -600,14 +653,17 @@ open -n -a SAOImage\ DS9 --args -title spectra
   table = hstack([hatab, niitab, imtab, slittab],
                  table_names=['ha', 'nii', 'im', 'slit'])
   # Photometric reference image
-  photom, = fits.open('imslit-median.fits')
+  photom, = fits.open('imslit-median-sub.fits')
   wphot = WCS(photom.header)
 
+  nii_ha_dict = {'radius': [], 'ratio': [], 'weight': []}
   for row in table:
       ha_hdu, = fits.open(DATADIR +'/SPMha/' + row['file_ha'])
       nii_hdu, = fits.open(DATADIR +'/SPMnii/' + row['file_nii'])
       im_hdu, = fits.open(DATADIR +'/' + row['filename'])
       im_hdu.header.remove('@EPOCH')
+
+  
 
       slit_coords = find_slit_coords(row, im_hdu.header, ha_hdu.header)
       calib_profile = slit_profile(slit_coords['RA'], slit_coords['Dec'],
@@ -620,7 +676,7 @@ open -n -a SAOImage\ DS9 --args -title spectra
 
 
       # Make a fake Ha+[N II] line (really should add continuum too)
-      spec_profile = (ha_profile+1.333*nii_profile) + 3.4*(ha_bg + nii_bg)
+      spec_profile = (ha_profile+1.333*nii_profile) # + 3.4*(ha_bg + nii_bg)
       # Zeroth order approximation to calibration
       rat0 = np.nansum(spec_profile)/np.nansum(calib_profile)
       print('Coarse calibration: ratio =', rat0)
@@ -629,6 +685,13 @@ open -n -a SAOImage\ DS9 --args -title spectra
       plt_prefix = '{:03d}-calib'.format(row.index+1)
       ratio = make_three_plots(spec_profile, calib_profile,
                                plt_prefix, niirat=nii_profile/ha_profile)
+
+      nii_ha_dict['radius'].extend(
+          np.hypot(slit_coords['RA'] - RA0, slit_coords['Dec'] - Dec0)*3600
+      )
+      nii_ha_dict['ratio'].extend(nii_profile/ha_profile)
+      nii_ha_dict['weight'].extend(spec_profile)
+  
 
       # Save calibrated spectra to files
       for lineid, hdu in [['ha', ha_hdu], ['nii', nii_hdu]]:
@@ -671,12 +734,623 @@ open -n -a SAOImage\ DS9 --args -title spectra
           # hdu.header.update(fixup4ds9(wslit).to_header(key=' '))
           calibfile = 'Calibrated/{}-{}.fits'.format(row['pos_nii'], lineid)
           hdu.writeto(calibfile, clobber=True)
-    
+
+
+  # Now do something with that nii/ha versus radius data
+  Table(nii_ha_dict).write('owl-nii-ha-ratio.tab', format='ascii.tab')
+
 #+END_SRC
 *** Run the program
 #+BEGIN_SRC sh :tangle no :results verbatim
 python owl-slit-calibrate.py
 #+END_SRC
+
+#+RESULTS:
+#+begin_example
+iarr = [  50.  150.  250.  350.  450.  550.  650.] jarr = [ 330.  330.  330.  330.  330.  330.  330.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.61977121, 55.04717858), (168.64547955, 55.04689099),
+     (168.67118752, 55.04659799), (168.69689512, 55.04629956),
+     (168.72260233, 55.04599573), (168.74830915, 55.04568647),
+     (168.77401556, 55.0453718)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.61977189  168.64548023  168.67118821  168.6968958   168.72260302
+  168.74830984  168.77401625] [ 55.04718215  55.04689456  55.04660155  55.04630313  55.04599929
+  55.04569003  55.04537536]
+[ 580.  474.  368.  262.  156.   50.  -56.] [ 456.  453.  451.  449.  447.  445.  443.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 3066.39498642
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+         c0             c1      
+    ------------ ---------------
+    1.0353244574 0.0214579854347
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.61977189, 55.04718215), (168.64547963, 55.04687769),
+     (168.67118697, 55.04656781), (168.6968939, 55.04625251),
+     (168.72260041, 55.0459318), (168.74830649, 55.04560568),
+     (168.77401213, 55.04527414)]>
+Displacements in arcsec: [ 0.          0.06075078  0.12150156  0.18225235  0.24300314  0.30375392
+  0.36450469]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.61977189, 55.04718215), (168.64547963, 55.04687769),
+     (168.67118697, 55.04656781), (168.6968939, 55.04625251),
+     (168.72260041, 55.0459318), (168.74830649, 55.04560568),
+     (168.77401213, 55.04527414)]>
+Displacements in arcsec: [ 0.          0.06075078  0.12150156  0.18225235  0.24300314  0.30375392
+  0.36450469]
+iarr = [  47.  147.  247.  347.  447.  547.  647.] jarr = [ 333.  333.  333.  333.  333.  333.  333.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.61922783, 55.04140997), (168.64497491, 55.04141763),
+     (168.67072201, 55.04141986), (168.69646912, 55.04141665),
+     (168.72221621, 55.04140801), (168.7479633, 55.04139394),
+     (168.77371035, 55.04137444)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.61922851  168.64497559  168.67072269  168.6964698   168.7222169
+  168.74796398  168.77371104] [ 55.04141354  55.0414212   55.04142342  55.04142021  55.04141157
+  55.0413975   55.04137799]
+[ 583.  476.  370.  264.  158.   51.  -55.] [ 414.  414.  414.  414.  414.  414.  414.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 2466.2359926
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0              c1      
+    -------------- ---------------
+    0.983782668481 0.0398314229867
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.61922851, 55.04141354), (168.64497558, 55.04140427),
+     (168.67072264, 55.04138957), (168.69646966, 55.04136944),
+     (168.72221665, 55.04134388), (168.74796359, 55.04131288),
+     (168.77371046, 55.04127645)]>
+Displacements in arcsec: [ 0.          0.06092858  0.12185716  0.18278575  0.24371433  0.30464291
+  0.36557148]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.61922851, 55.04141354), (168.64497558, 55.04140427),
+     (168.67072264, 55.04138957), (168.69646966, 55.04136944),
+     (168.72221665, 55.04134388), (168.74796359, 55.04131288),
+     (168.77371046, 55.04127645)]>
+Displacements in arcsec: [ 0.          0.06092858  0.12185716  0.18278575  0.24371433  0.30464291
+  0.36557148]
+iarr = [  50.  150.  250.  350.  450.  550.  650.] jarr = [ 335.  335.  335.  335.  335.  335.  335.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.62070788, 55.03624782), (168.64629708, 55.03615856),
+     (168.67188616, 55.03606393), (168.69747513, 55.03596393),
+     (168.72306396, 55.03585857), (168.74865265, 55.03574784),
+     (168.7742412, 55.03563174)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.62070856  168.64629776  168.67188684  168.69747581  168.72306464
+  168.74865334  168.77424189] [ 55.03625139  55.03616213  55.03606749  55.0359675   55.03586213
+  55.0357514   55.0356353 ]
+[ 576.  471.  365.  260.  154.   49.  -57.] [ 377.  376.  375.  375.  374.  373.  373.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 1554.02663153
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0             c1       
+    ------------- ----------------
+    1.01687799896 -0.0437797262976
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62070856, 55.03625139), (168.64629755, 55.03614541),
+     (168.6718864, 55.03603406), (168.69747509, 55.03591734),
+     (168.72306363, 55.03579526), (168.74865199, 55.03566781),
+     (168.77424017, 55.03553499)]>
+Displacements in arcsec: [ 0.          0.06018812  0.12037626  0.18056439  0.24075253  0.30094066
+  0.36112877]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62070856, 55.03625139), (168.64629755, 55.03614541),
+     (168.6718864, 55.03603406), (168.69747509, 55.03591734),
+     (168.72306363, 55.03579526), (168.74865199, 55.03566781),
+     (168.77424017, 55.03553499)]>
+Displacements in arcsec: [ 0.          0.06018812  0.12037626  0.18056439  0.24075253  0.30094066
+  0.36112877]
+iarr = [  50.  150.  250.  350.  450.  550.  650.] jarr = [ 340.  340.  340.  340.  340.  340.  340.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.62067412, 55.03079221), (168.64647202, 55.03066227),
+     (168.67226977, 55.03052687), (168.69806734, 55.03038602),
+     (168.72386472, 55.03023971), (168.74966191, 55.03008795),
+     (168.7754589, 55.02993073)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.62067479  168.6464727   168.67227045  168.69806802  168.7238654
+  168.7496626   168.77545959] [ 55.03079578  55.03066583  55.03053043  55.03038958  55.03024327
+  55.03009151  55.02993429]
+[ 577.  470.  364.  257.  151.   44.  -62.] [ 338.  337.  336.  335.  334.  332.  331.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 1199.11735214
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+         c0            c1      
+    ----------- ---------------
+    1.028611908 0.0440291582745
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62067479, 55.03079578), (168.64647241, 55.03064884),
+     (168.67226983, 55.03049645), (168.69806705, 55.0303386),
+     (168.72386405, 55.0301753), (168.74966082, 55.03000654),
+     (168.77545735, 55.02983233)]>
+Displacements in arcsec: [ 0.          0.0611792   0.12235841  0.18353763  0.24471684  0.30589604
+  0.36707523]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62067479, 55.03079578), (168.64647241, 55.03064884),
+     (168.67226983, 55.03049645), (168.69806705, 55.0303386),
+     (168.72386405, 55.0301753), (168.74966082, 55.03000654),
+     (168.77545735, 55.02983233)]>
+Displacements in arcsec: [ 0.          0.0611792   0.12235841  0.18353763  0.24471684  0.30589604
+  0.36707523]
+iarr = [  45.  145.  245.  345.  445.  545.  645.] jarr = [ 345.  345.  345.  345.  345.  345.  345.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.62314934, 55.02441121), (168.64878912, 55.02432817),
+     (168.6744288, 55.02423974), (168.70006836, 55.02414592),
+     (168.72570781, 55.02404671), (168.75134712, 55.02394212),
+     (168.77698629, 55.02383213)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.62315001  168.64878979  168.67442947  168.70006904  168.72570849
+  168.7513478   168.77698697] [ 55.02441478  55.02433174  55.02424331  55.02414948  55.02405027
+  55.02394567  55.02383569]
+[ 566.  461.  355.  249.  143.   37.  -68.] [ 292.  291.  290.  290.  289.  288.  288.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 1764.70515006
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0             c1      
+    ------------- ---------------
+    1.03629125695 0.0081526325065
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62315001, 55.02441478), (168.6487896, 55.02431495),
+     (168.67442905, 55.02420973), (168.70006837, 55.02409912),
+     (168.72570752, 55.02398313), (168.75134651, 55.02386174),
+     (168.77698533, 55.02373496)]>
+Displacements in arcsec: [ 0.          0.06043533  0.12087067  0.18130601  0.24174135  0.30217667
+  0.36261199]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62315001, 55.02441478), (168.6487896, 55.02431495),
+     (168.67442905, 55.02420973), (168.70006837, 55.02409912),
+     (168.72570752, 55.02398313), (168.75134651, 55.02386174),
+     (168.77698533, 55.02373496)]>
+Displacements in arcsec: [ 0.          0.06043533  0.12087067  0.18130601  0.24174135  0.30217667
+  0.36261199]
+iarr = [ 322.  322.  322.  322.  322.  322.] jarr = [ -47.   53.  153.  253.  353.  453.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.6091251, 55.01992057), (168.63934087, 55.0195092),
+     (168.66955602, 55.01909034), (168.69977054, 55.01866401),
+     (168.72998441, 55.01823018), (168.76019762, 55.01778888)]>
+Binning along slit: image = 2 spectrum = 2
+[ 168.60912577  168.63934154  168.66955669  168.69977122  168.72998509
+  168.76019831] [ 55.01992414  55.01951277  55.01909391  55.01866757  55.01823374
+  55.01779243]
+[ 624.  500.  375.  250.  126.    1.] [ 259.  256.  253.  250.  247.  244.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 17408 17920
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 17408 17408
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 6815.99554715
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0             c1      
+    ------------- ---------------
+    1.02619428422 0.0220832610185
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 17408 17920
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.60912577, 55.01992414), (168.63934071, 55.01949368),
+     (168.669555, 55.01905574), (168.69976861, 55.01861031),
+     (168.72998153, 55.01815741), (168.76019373, 55.01769701)]>
+Displacements in arcsec: [ 0.          0.0687295   0.13745901  0.20618852  0.27491804  0.34364755]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 17408 17408
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.60912577, 55.01992414), (168.63934071, 55.01949368),
+     (168.669555, 55.01905574), (168.69976861, 55.01861031),
+     (168.72998153, 55.01815741), (168.76019373, 55.01769701)]>
+Displacements in arcsec: [ 0.          0.0687295   0.13745901  0.20618852  0.27491804  0.34364755]
+iarr = [  40.  140.  240.  340.  440.  540.  640.] jarr = [ 344.  344.  344.  344.  344.  344.  344.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.62959071, 55.01498991), (168.65488835, 55.01464533),
+     (168.68018555, 55.0142955), (168.70548232, 55.01394042),
+     (168.73077864, 55.0135801), (168.7560745, 55.01321453),
+     (168.78136988, 55.01284372)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.62959138  168.65488902  168.68018623  168.705483    168.73077932
+  168.75607518  168.78137057] [ 55.01499348  55.01464889  55.01429906  55.01394399  55.01358366
+  55.01321809  55.01284727]
+[ 540.  436.  331.  227.  122.   18.  -87.] [ 224.  221.  219.  216.  214.  211.  208.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 3469.59680819
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0             c1       
+    ------------- ----------------
+    1.05450268533 0.00900367677823
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62959138, 55.01499348), (168.65488832, 55.01463255),
+     (168.68018479, 55.01426638), (168.70548079, 55.01389496),
+     (168.73077631, 55.01351829), (168.75607134, 55.01313638),
+     (168.78136587, 55.01274922)]>
+Displacements in arcsec: [ 0.          0.05885448  0.11770896  0.17656345  0.23541793  0.29427241
+  0.35312688]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62959138, 55.01499348), (168.65488832, 55.01463255),
+     (168.68018479, 55.01426638), (168.70548079, 55.01389496),
+     (168.73077631, 55.01351829), (168.75607134, 55.01313638),
+     (168.78136587, 55.01274922)]>
+Displacements in arcsec: [ 0.          0.05885448  0.11770896  0.17656345  0.23541793  0.29427241
+  0.35312688]
+iarr = [ 322.  322.  322.  322.  322.  322.] jarr = [ -45.   55.  155.  255.  355.  455.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.60977587, 55.00915669), (168.64002644, 55.00889558),
+     (168.67027661, 55.00862698), (168.70052638, 55.00835086),
+     (168.73077572, 55.00806725), (168.76102463, 55.00777613)]>
+Binning along slit: image = 2 spectrum = 2
+[ 168.60977654  168.64002711  168.67027728  168.70052705  168.7307764
+  168.76102531] [ 55.00916026  55.00889915  55.00863054  55.00835443  55.00807081
+  55.00777969]
+[ 622.  497.  372.  247.  122.   -3.] [ 182.  180.  178.  176.  174.  172.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 17408 17920
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 17408 17408
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 7205.61300078
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0              c1       
+    ------------- -----------------
+    1.02472585054 -0.00450315967281
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 17408 17920
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.60977654, 55.00916026), (168.64002657, 55.00888002),
+     (168.67027617, 55.00859228), (168.70052531, 55.00829703),
+     (168.73077399, 55.00799428), (168.76102218, 55.00768403)]>
+Displacements in arcsec: [ 0.          0.0688864   0.13777282  0.20665924  0.27554567  0.34443208]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 17408 17408
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.60977654, 55.00916026), (168.64002657, 55.00888002),
+     (168.67027617, 55.00859228), (168.70052531, 55.00829703),
+     (168.73077399, 55.00799428), (168.76102218, 55.00768403)]>
+Displacements in arcsec: [ 0.          0.0688864   0.13777282  0.20665924  0.27554567  0.34443208]
+iarr = [  47.  147.  247.  347.  447.  547.  647.] jarr = [ 342.  342.  342.  342.  342.  342.  342.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.62997377, 55.00522377), (168.65549794, 55.00507595),
+     (168.68102193, 55.00492279), (168.70654572, 55.00476428),
+     (168.73206931, 55.00460044), (168.75759268, 55.00443125),
+     (168.78311583, 55.00425672)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.62997444  168.65549861  168.6810226   168.70654639  168.73206998
+  168.75759336  168.78311651] [ 55.00522734  55.00507952  55.00492635  55.00476784  55.00460399
+  55.0044348   55.00426027]
+[ 538.  433.  328.  222.  117.   11.  -94.] [ 154.  152.  151.  150.  149.  148.  147.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 3805.55760052
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0             c1      
+    ------------- ---------------
+    1.04176610305 0.0346547940129
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62997444, 55.00522734), (168.65549829, 55.00506288),
+     (168.68102193, 55.00489307), (168.70654534, 55.00471792),
+     (168.73206851, 55.00453744), (168.75759144, 55.0043516),
+     (168.78311411, 55.00416043)]>
+Displacements in arcsec: [ 0.          0.05990792  0.11981584  0.17972376  0.23963168  0.29953959
+  0.35944748]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.62997444, 55.00522734), (168.65549829, 55.00506288),
+     (168.68102193, 55.00489307), (168.70654534, 55.00471792),
+     (168.73206851, 55.00453744), (168.75759144, 55.0043516),
+     (168.78311411, 55.00416043)]>
+Displacements in arcsec: [ 0.          0.05990792  0.11981584  0.17972376  0.23963168  0.29953959
+  0.35944748]
+iarr = [  45.  145.  245.  345.  445.  545.  645.] jarr = [ 341.  341.  341.  341.  341.  341.  341.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.63006073, 55.00091668), (168.65548999, 55.00076121),
+     (168.68091906, 55.00060043), (168.70634792, 55.00043436),
+     (168.73177657, 55.00026298), (168.757205, 55.0000863),
+     (168.78263319, 54.99990432)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.6300614   168.65549066  168.68091973  168.7063486   168.73177725
+  168.75720568  168.78263387] [ 55.00092025  55.00076477  55.000604    55.00043792  55.00026654
+  55.00008986  54.99990787]
+[ 538.  433.  328.  223.  118.   13.  -92.] [ 123.  121.  120.  119.  118.  117.  115.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 3740.09161274
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0             c1      
+    ------------- ---------------
+    1.03637039006 0.0218490192218
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.6300614, 55.00092025), (168.65549033, 55.00074826),
+     (168.68091903, 55.00057096), (168.7063475, 55.00038837),
+     (168.73177573, 55.00020047), (168.7572037, 55.00000727),
+     (168.78263141, 54.99980877)]>
+Displacements in arcsec: [ 0.          0.05946678  0.11893357  0.17840036  0.23786714  0.2973339
+  0.35680065]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.6300614, 55.00092025), (168.65549033, 55.00074826),
+     (168.68091903, 55.00057096), (168.7063475, 55.00038837),
+     (168.73177573, 55.00020047), (168.7572037, 55.00000727),
+     (168.78263141, 54.99980877)]>
+Displacements in arcsec: [ 0.          0.05946678  0.11893357  0.17840036  0.23786714  0.2973339
+  0.35680065]
+iarr = [  50.  150.  250.  350.  450.  550.  650.] jarr = [ 339.  339.  339.  339.  339.  339.  339.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.63079053, 54.99665662), (168.65620126, 54.99648388),
+     (168.68161178, 54.99630585), (168.70702208, 54.99612252),
+     (168.73243214, 54.9959339), (168.75784195, 54.99573998),
+     (168.78325151, 54.99554076)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.63079119  168.65620193  168.68161245  168.70702275  168.73243281
+  168.75784263  168.78325219] [ 54.99666019  54.99648745  54.99630941  54.99612608  54.99593746
+  54.99574354  54.99554432]
+[ 535.  430.  325.  220.  115.   10.  -95.] [ 92.  91.  89.  88.  87.  85.  84.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 3617.60372524
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0            c1      
+    ------------- --------------
+    1.05749726597 0.141516850128
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.63079119, 54.99666019), (168.65620157, 54.99647095),
+     (168.68161169, 54.99627642), (168.70702156, 54.9960766),
+     (168.73243116, 54.99587148), (168.75784048, 54.99566107),
+     (168.78324952, 54.99544536)]>
+Displacements in arcsec: [ 0.          0.05938408  0.11876817  0.17815225  0.23753633  0.29692039
+  0.35630443]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.63079119, 54.99666019), (168.65620157, 54.99647095),
+     (168.68161169, 54.99627642), (168.70702156, 54.9960766),
+     (168.73243116, 54.99587148), (168.75784048, 54.99566107),
+     (168.78324952, 54.99544536)]>
+Displacements in arcsec: [ 0.          0.05938408  0.11876817  0.17815225  0.23753633  0.29692039
+  0.35630443]
+iarr = [  46.  146.  246.  346.  446.  546.  646.] jarr = [ 339.  339.  339.  339.  339.  339.  339.]
+coords = <SkyCoord (FK5: equinox=J2000.000): (ra, dec) in deg
+    [(168.63052, 54.99326288), (168.65592963, 54.9930969),
+     (168.68133905, 54.99292563), (168.70674825, 54.99274906),
+     (168.73215723, 54.9925672), (168.75756597, 54.99238004),
+     (168.78297446, 54.99218758)]>
+Binning along slit: image = 3 spectrum = 3
+[ 168.63052066  168.65593029  168.68133972  168.70674892  168.7321579
+  168.75756665  168.78297514] [ 54.99326645  54.99310047  54.99292919  54.99275262  54.99257075
+  54.99238359  54.99219114]
+[ 536.  431.  326.  221.  116.   12.  -93.] [ 67.  66.  65.  64.  62.  61.  60.]
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+Wav: [6559.29, 6566.29] Pixel: [  52.34030432  212.33250092]
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+Wav: [6579.95, 6586.95] Pixel: [  44.4295912   203.92043141]
+Coarse calibration: ratio = 4715.65793458
+Model: Chebyshev1D
+Inputs: ('x',)
+Outputs: ('y',)
+Model set size: 1
+Degree: 1
+Parameters:
+          c0             c1       
+    ------------- ----------------
+    1.04024408834 -0.0589823414095
+Saving ha calibrated spectrum
+Wav: [6557.79, 6559.29] Pixel: [ 18.05626219  52.34030432]
+Wav: [6566.29, 6567.79] Pixel: [ 212.33250092  246.61654304]
+Background weights: 21250 21875
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.63052066, 54.99326645), (168.65592994, 54.99308397),
+     (168.68133898, 54.9928962), (168.70674777, 54.99270314),
+     (168.73215631, 54.99250478), (168.75756457, 54.99230113),
+     (168.78297256, 54.99209218)]>
+Displacements in arcsec: [ 0.          0.05938118  0.11876237  0.17814356  0.23752474  0.2969059
+  0.35628705]
+Saving nii calibrated spectrum
+Wav: [6578.45, 6579.95] Pixel: [ 10.25298258  44.4295912 ]
+Wav: [6586.95, 6588.45] Pixel: [ 203.92043141  238.09704002]
+Background weights: 21250 21250
+New coords: <SkyCoord (ICRS): (ra, dec) in deg
+    [(168.63052066, 54.99326645), (168.65592994, 54.99308397),
+     (168.68133898, 54.9928962), (168.70674777, 54.99270314),
+     (168.73215631, 54.99250478), (168.75756457, 54.99230113),
+     (168.78297256, 54.99209218)]>
+Displacements in arcsec: [ 0.          0.05938118  0.11876237  0.17814356  0.23752474  0.2969059
+  0.35628705]
+#+end_example
+
 ** Test the heliocentric correction module
 + This gives results within 0.2 km/s of Teresa's values
 + But the sign is opposite
@@ -714,10 +1388,12 @@ for fn in speclist:
 | pos10-ha | 2013-02-19 | 56342.0 | 13:39:28 | 11:15:26.5 | 54:55:34.0 |  2.74 |
 | pos11-ha | 2013-02-19 | 56342.0 | 14:02:54 | 11:15:26.0 | 54:55:20.0 |  2.76 |
 | pos12-ha | 2013-02-19 | 56342.0 | 14:32:57 | 11:15:25.7 | 54:55:13.0 |  2.78 |
-** TODO [1/3] Improvements to spectral maps
+** DONE [3/3] Improvements to spectral maps
+CLOSED: [2016-08-19 Fri 11:19]
 + [X] Increase width of projected slit
-+ [ ] Use median image to fake the vertical profile across an artificially wide slit
-+ [ ] Finesse the flux calibration of slits 04 and 07
++ [X] Use median image to fake the vertical profile across an artificially wide slit
+  + CANCELLED - not necessary
++ [X] Finesse the flux calibration of slits 04 and 07
   + Although they aren't the ones that look particularly bad
 
 ** DONE Construct spectral maps
@@ -769,7 +1445,7 @@ CLOSED: [2016-08-16 Tue 23:23]
   outimage = np.zeros((NY, NX))
   outweights = np.zeros((NY, NX))
 
-  slit_width = 8.0                # width in arcsec of 150 micron slit
+  slit_width = 4.0                # width in arcsec of 150 micron slit
   slit_pix_width = slit_width/pixel_scale
 
   speclist = glob.glob('Calibrated/*-{}.fits'.format(line_id))
@@ -863,6 +1539,14 @@ CLOSED: [2016-08-16 Tue 23:23]
 
 #+RESULTS:
 : None
+
+
+** Tidy up the channel maps
+
+*** Move the 20 km/s chennels to a subfolder
+#+BEGIN_SRC bash
+mv owl-*slits-{ha,nii}[+-]???[+-]???*.fits channels20
+#+END_SRC
 
 ** Run owl-spectral-map.py
 #+BEGIN_SRC sh :exports code :results verbatim
@@ -959,7 +1643,7 @@ xpaset -p ds9 fits $PWD/owl-slits-ha-allvels.fits[2]
 #+RESULTS:
 
 #+BEGIN_SRC sh :results silent
-  ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
+  ranges='+060+070 +050+060 +040+050 +030+040 +020+030 +010+020 +000+010 -010+000 -020-010 -030-020 -040-030 -050-040 -060-050'
   # blueranges='-030-010 -050-030 -070-050'
   # farblueranges='-090-070 -110-090 -130-110'
   # for vrange in $redranges $blueranges $farblueranges; do
@@ -1013,12 +1697,12 @@ CLOSED: [2016-08-17 Wed 23:21]
   slit_im_wt = slit_hdus['slits'].data
   slit_im = slit_hdus['scaled'].data
 
-  imhdu, = fits.open('imslit-median.fits')
+  imhdu, = fits.open('imslit-median-sub.fits')
 
   # Make BG mask by smoothing and thresholding
   gauss_kernel = Gaussian2DKernel(5)
   im_smooth = convolve_fft(imhdu.data, gauss_kernel)
-  bgmask = im_smooth < 0.15
+  bgmask = im_smooth < 0.05
   median_bg = np.median(imhdu.data[bgmask])
   # Arbitrary weight for the new bg pixels, similar to slit weights
   bgwt = 3000
@@ -1042,19 +1726,22 @@ CLOSED: [2016-08-17 Wed 23:21]
 #+END_SRC 
 
 #+BEGIN_SRC sh :results verbatim
-python owl-debleed-map.py nii-allvels
+python owl-debleed-map.py ha-allvels
 #+END_SRC
 
 #+RESULTS:
 
 #+BEGIN_SRC sh
 xpaset -p ds9 fits $PWD/owl-dslits-ha-allvels.fits[3]
+xpaset -p ds9 frame prev
+xpaset -p ds9 match frame wcs
+xpaset -p ds9 frame prev
 #+END_SRC
 
 #+RESULTS:
 
 #+BEGIN_SRC sh :results silent
-  ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
+  ranges='+060+070 +050+060 +040+050 +030+040 +020+030 +010+020 +000+010 -010+000 -020-010 -030-020 -040-030 -050-040 -060-050'
   for line in ha nii; do
       for chan in $ranges -allvels; do
           python owl-debleed-map.py ${line}${chan}
@@ -1085,7 +1772,7 @@ python $mdir/multibin-map.py owl-dslits-ha-allvels.fits
 
 #+BEGIN_SRC sh :results silent
 mdir=/Users/will/Dropbox/OrionWest
-ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
+ranges='+060+070 +050+060 +040+050 +030+040 +020+030 +010+020 +000+010 -010+000 -020-010 -030-020 -040-030 -050-040 -060-050'
 for vrange in $ranges -allvels; do
     python $mdir/multibin-map.py owl-dslits-ha$vrange.fits
     python $mdir/multibin-map.py owl-dslits-nii$vrange.fits
@@ -1155,8 +1842,8 @@ xpaset -p ds9 frame next
   except IndexError:
       minw_coarse = None
 
-  nlist = [1, 2, 4, 8, 16, 32]
-  minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0]
+  nlist = [1, 2, 4, 8, 16, 32, 64]
+  minweights = [0.5, 1.0, 2.0, 4.0, 8.0, 8.0, 8.0]
   if minw_coarse is not None:
       minweights[-1] = minw_coarse
   outim = np.zeros((512, 512))
@@ -1166,14 +1853,15 @@ xpaset -p ds9 frame next
       im = hdulist['scaled'].data
       hdr = hdulist['scaled'].header
       w = hdulist['weight'].data
-      m = cleanup_mask(w*im >= minw*minw_scale, n)
+      # m = cleanup_mask(w*im >= minw*minw_scale, n)
+      m = np.isfinite(w) & (w > 0.0) & np.isfinite(im) & (im > 0.0)
       outim[m] = im[m]
   fits.PrimaryHDU(header=hdr, data=outim).writeto(prefix + '-multibin.fits', clobber=True)
 #+END_SRC
 
 
 #+BEGIN_SRC sh :results silent
-ranges='+070+090 +050+070 +030+050 +010+030 -010+010 -030-010 -050-030 -070-050'
+ranges='+060+070 +050+060 +040+050 +030+040 +020+030 +010+020 +000+010 -010+000 -020-010 -030-020 -040-030 -050-040 -060-050'
 for vrange in $ranges -allvels; do
     python owl-multibin-combine.py owl-dslits-ha$vrange 0.0001 0.0
     python owl-multibin-combine.py owl-dslits-nii$vrange 0.0001 0.0

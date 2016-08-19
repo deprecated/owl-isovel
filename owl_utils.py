@@ -188,14 +188,24 @@ def wavs2slice(wavs, wcs, db):
     return slice(min(i1, i2), max(i1, i2))
 
 
-def remove_bg_and_regularize(data, wcs, wavrest, db, dwbg_in=7.0, dwbg_out=10.0):
+def remove_bg_and_regularize(data, wcs, wavrest, db,
+                             dwbg_in=7.0, dwbg_out=10.0,
+                             margin=20):
     '''
     Transpose data if necessary, and then subtract off the background (blue and red of line)
+
+    Also, remove average profile from ends of the slit if `margin` is set
     '''
     isT = db['saxis'] == 1
     # Make sure array axis order is (position, wavelength)
     if isT:
         data = data.T
+
+    # Optionally remove average of strips from ends of slit
+    if margin is not None:
+       marg1 = data[:margin, :].mean(axis=0, keepdims=True)
+       marg2 = data[-margin:, :].mean(axis=0, keepdims=True)
+       data -= 0.5*(marg1 + marg2)
     # pixel limits for blue, red bg extraction
     bslice = wavs2slice([wavrest-dwbg_out/2, wavrest-dwbg_in/2], wcs, db)
     rslice = wavs2slice([wavrest+dwbg_in/2, wavrest+dwbg_out/2], wcs, db)
