@@ -1,0 +1,7 @@
+# Region file format: DS9 version 4.1
+global color=green dashlist=8 3 width=1 font="helvetica 10 normal roman" select=1 highlite=1 dash=0 fixed=0 edit=1 move=1 delete=1 include=1 source=1
+fk5
+point(168.69838,55.019147) # point=cross color=red width=2
+# text(168.74566,54.989069) textangle=9.06563e-05 color=white font="helvetica 14 bold roman" text={+25}
+ellipse(168.70454,55.007316,38.12198",22.590886",60) # color=#ffb0cc width=4 dash=1
+ellipse(168.70728,55.023397,22.566173",19.76145",0) # color=#802020 width=3

@@ -40,6 +40,78 @@ Seeing (FWHM):	0.95"(G and R)...1.50" (OIII and H-beta)
     + See [[file:owl-all-radec-images.bck]]
   + Take a median of each pixel, which should remove the slit parts
   + Then divide each image by the median image to get the slit profile
+
+* Checking the velocity calibrations
+
+** Rest wavelengths
++ Teresa is using
+  + Ha :: 6562.82
+  + [N II] :: 6583.45
++ I am using
+  + restwavs = {'ha': 6562.79, 'nii': 6583.45}
++ So that is a difference of
+  + 300000 (6562.82 - 6562.79)/6562.79 = 1.37 km/s for Ha
+
+** Measurements on the original spectra
+Original wavelengths are in topocentric frame
+*** spec058 Ha
+1. Geocoronal line:
+   + bottom: 6562.768
+   + top: 6562.804
+   + Average: 6562.786 +/- 0.018 
+2. Ellipse fit to lowish contour level of 40, 45
+   + 6563.3295
+3. Ellipse fit to bright shell: level of 100
+   + 6563.3076
+4. Tangent to contours:
+   + 6563.30
+5. Average of splitting
+   + Blue: 6562.629
+   + Red: 6563.927
+   + Average: 6563.278
+**** Ha conversion to topocentric, heliocentric velocities
++ Heliocentric correction is +19.75 according to me
+  + Teresa has -19.65, which is close enough (assuming she has a different sign convention)
+
+| Method |        lambda(obs) |        V(topo) |        V(helio) |
+|--------+--------------------+----------------+-----------------|
+|      1 | 6562.786 +/- 0.018 | -0.18 +/- 0.82 | -19.93 +/- 0.82 |
+|--------+--------------------+----------------+-----------------|
+|      B |           6562.629 |          -7.36 |          -27.11 |
+|      R |           6563.927 |          51.97 |           32.22 |
+|--------+--------------------+----------------+-----------------|
+|      2 |          6563.3295 |          24.66 |            4.91 |
+|      3 |          6563.3076 |          23.66 |            3.91 |
+|      4 |            6563.30 |          23.31 |            3.56 |
+|      5 |           6563.278 |          22.31 |            2.56 |
+|--------+--------------------+----------------+-----------------|
+|        |                    |            xxx |     3.7 +/- 0.5 |
+#+TBLFM: $3=3e5 ($-1 - 6562.79)/6562.79 ;f2::$4=$-1 - 19.75; f2::@9$3=xxx::@9$4=vmeane(@-4..@-1);f1
+*** spec058 [N II]
+1. Ellipse fit to shell - contour level 50
+   + 6583.9397
+2. Tangent to contours
+   + 6583.9321
+3. Average of splitting
+   + Blue: 6583.084
+   + Red: 6584.818
+   + Average: 6583.951
+**** [N II] conversion to topocentric, heliocentric velocities
+
+| Method | lambda(obs) | V(topo) |    V(helio) |
+|--------+-------------+---------+-------------|
+|      B |    6583.084 |  -16.68 |      -36.43 |
+|      R |    6584.818 |   62.34 |       42.59 |
+|--------+-------------+---------+-------------|
+|      1 |   6583.9397 |   22.32 |        2.57 |
+|      2 |   6583.9321 |   21.97 |        2.22 |
+|      3 |    6583.951 |   22.83 |        3.08 |
+|--------+-------------+---------+-------------|
+|        |             |         | 2.6 +/- 0.2 |
+#+TBLFM: $3=3e5 ($-1 - 6583.45)/6583.45 ;f2::$4=$-1 - 19.75; f2::@7$4=vmeane(@-3..@-1);f1
+
+
+
 * TODO Making the final figures
 + Use Aplpy to do isovel panels
   + grayscale or viridis?
@@ -47,9 +119,182 @@ Seeing (FWHM):	0.95"(G and R)...1.50" (OIII and H-beta)
     + We have 13 channels and 2 lines
 ** owl-isovel-figs.py
 #+BEGIN_SRC python :tangle owl-isovel-figs.py
+  from astropy.io import fits
+  import aplpy
+  from matplotlib import pyplot as plt
+  from matplotlib.figure import SubplotParams
+
+  figfile = 'owl-isovel-figs.png'
+
+  def chan2vrange(ichan, v0=5.0, dv=10.0):
+      """Convert integer channel number to velocity range"""
+      v1 = v0 + (ichan - 0.5)*dv
+      v2 = v0 + (ichan + 0.5)*dv
+      return '{:+04d}{:+04d}'.format(int(v1), int(v2))
+
+  subplotpars = SubplotParams(left=0.0, right=1.0,
+                              bottom=0.0, top=1.0,
+                              wspace=0.0, hspace=0.0)
+  fig = plt.figure(figsize=(26, 4), subplotpars=subplotpars)
+
+  ichannels = range(-6, 7)
+  lineid = 'ha'
+
+  linemax = {'ha': 0.12, 'nii': 0.08}
+
+  n = 0
+  for j, lineid in enumerate(['ha', 'nii']):
+      for i, ichan in enumerate(ichannels):
+          n += 1
+          fitsfile = 'owl-dslits-{}{}-multibin.fits'.format(lineid, chan2vrange(ichan))
+          f = aplpy.FITSFigure(fitsfile, figure=fig, subplot=(2, 13, n))
+          f.show_grayscale(vmin=0.0, vmax=linemax[lineid], invert=True, interpolation='none')
+          f.ticks.set_color('black')
+          f.hide_axis_labels()
+          f.hide_tick_labels()
+
+  fig.savefig(figfile, dpi=150)
+  print(figfile)
 
 
 #+END_SRC
+
+#+RESULTS:
+: None
+
+#+BEGIN_SRC sh :results file
+python owl-isovel-figs.py
+#+END_SRC
+
+#+RESULTS:
+[[file:owl-isovel-figs.png]]
+** TODO [4/6] Fancy layout for the figure
++ This is the same as the previous, but incorporates the layout that I tried out in [[file:owl-isovel-fig-layout.idraw]]
++ [X] Sort out the placement of sub-elements
++ [X] Add the four allvels pics at the top
++ [X] Add the cross for the star
++ [-] Add the regions
+  + Do this in Graphic.app would be easiest
++ [X] Make it color - viridis color map
++ [-] Add labels in Graphic.app
+
+#+BEGIN_SRC python :tangle owl-isovel-fancy.py :eval no
+  from astropy.io import fits
+  import aplpy
+  from matplotlib import pyplot as plt
+  from matplotlib.figure import SubplotParams
+
+  figfile = 'owl-isovel-fancy.png'
+
+  def chan2vrange(ichan, v0=5.0, dv=10.0):
+      """Convert integer channel number to velocity range"""
+      v1 = v0 + (ichan - 0.5)*dv
+      v2 = v0 + (ichan + 0.5)*dv
+      return '{:+04d}{:+04d}'.format(int(v1), int(v2))
+
+  # Layout dimensions, all in inches
+  paper_size = 11, 8.5
+  margin = 0.3
+  stamp_size = 1.4  # inches
+
+  # Origin of each of the three major sections of the figure
+  origin = {
+      'nii': (margin, margin),
+      'ha': (margin, margin + 2*stamp_size + margin),
+      'allvels': (margin + 0.75*stamp_size, paper_size[1] - margin - stamp_size),
+  }
+  # (x, y) offsets for the V channels in units of stamp_size
+  snake = {
+      # negative V channels in top row
+      -6: (0, 1),
+      -5: (1, 1),
+      -4: (2, 1),
+      -3: (3, 1),
+      -2: (4, 1),
+      -1: (5, 1),
+      # central panel on far-right, half-way down
+      0: (6, 0.5),
+      # positive V channels in bottom row
+      6: (0, 0),
+      5: (1, 0),
+      4: (2, 0),
+      3: (3, 0),
+      2: (4, 0),
+      1: (5, 0),
+  }
+
+  fig = plt.figure(figsize=paper_size)
+
+  ichannels = range(-6, 7)
+  linemax = {'ha': 0.12, 'nii': 0.08}
+
+  ra_tick_spacing = 10.0*15/(60*60)  # 10 m
+  dec_tick_spacing = 60/(60*60)      # 60''
+  xstar, ystar = 168.69878, 55.019228
+
+  # A snakey sequence of channel maps for each line
+  for lineid in ['ha', 'nii']:
+      for ichan in ichannels:
+          x0 = origin[lineid][0] + snake[ichan][0]*stamp_size
+          y0 = origin[lineid][1] + snake[ichan][1]*stamp_size
+          # Define window [x, y, w, h] in fractions of figure size
+          window = [x0/paper_size[0], y0/paper_size[1],
+                    stamp_size/paper_size[0], stamp_size/paper_size[1]]
+          fitsfile = 'owl-dslits-{}{}-multibin.fits'.format(lineid, chan2vrange(ichan))
+          f = aplpy.FITSFigure(fitsfile, figure=fig, subplot=window)
+          f.show_colorscale(vmin=0.0, vmax=linemax[lineid],
+                           cmap='viridis', interpolation='none')
+          f.ticks.set_color('gray')
+          f.frame.set_color('gray')
+          f.hide_axis_labels()
+          f.hide_tick_labels()
+          f.ticks.set_xspacing(ra_tick_spacing)
+          f.ticks.set_yspacing(dec_tick_spacing)
+          f.show_markers([xstar], [ystar], marker='*')
+  #
+  # And the four all-vels images across the top
+  #
+
+  for i, [fn, vmax, ihdu] in enumerate(
+          [['imslit-median-sub', 1.5, 0],
+           ['owl-slits-ha-allvels', 0.85, 3],
+           ['owl-dslits-ha-allvels-multibin', 1.0, 0],
+           ['owl-dslits-nii-allvels-multibin', 0.4, 0],
+           ['imslit-median-sub', 1.5, 0]]
+  ):
+      x0 = origin['allvels'][0] + i*(5./4.)*stamp_size
+      y0 = origin['allvels'][1]
+      window = [x0/paper_size[0], y0/paper_size[1],
+                stamp_size/paper_size[0], stamp_size/paper_size[1]]
+      fitsfile = fn  + '.fits'
+      f = aplpy.FITSFigure(fitsfile, figure=fig, subplot=window, hdu=ihdu)
+      f.show_grayscale(vmin=0.0, vmax=vmax, invert=True, interpolation='none')
+      f.ticks.set_color('gray')
+      if i > 0:
+          f.hide_axis_labels()
+          f.hide_tick_labels()
+      else:
+          f.axis_labels.set_font(size='x-small')
+          f.tick_labels.set_font(size='x-small')
+          f.tick_labels.set_xformat('hh:mm:ss.s')
+          f.tick_labels.set_yformat('dd:mm:ss.s')
+          f.tick_labels.set_style('colons')
+      f.ticks.set_xspacing(ra_tick_spacing)
+      f.ticks.set_yspacing(dec_tick_spacing)
+      f.show_markers([xstar], [ystar], marker='*')
+
+  fig.savefig(figfile, dpi=150)
+  print(figfile)
+
+
+#+END_SRC
+
+#+BEGIN_SRC sh :results file
+python owl-isovel-fancy.py
+#+END_SRC
+
+#+RESULTS:
+[[file:owl-isovel-fancy.png]]
 
 * Utility functions
 :PROPERTIES:

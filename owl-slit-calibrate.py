@@ -1,4 +1,8 @@
 # [[file:teresa-owl.org::*%20Program%20owl-slit-calibrate.py][\[2/3\]\ Program\ owl-slit-calibrate\.py:1]]
+open -n -a SAOImage\ DS9 --args -title spectra
+# \[2/3\]\ Program\ owl-slit-calibrate\.py:1 ends here
+
+# [[file:teresa-owl.org::*%20Program%20owl-slit-calibrate.py][\[2/3\]\ Program\ owl-slit-calibrate\.py:2]]
 import os
 import sys
 import numpy as np
@@ -187,4 +191,4 @@ for row in table:
 
 # Now do something with that nii/ha versus radius data
 Table(nii_ha_dict).write('owl-nii-ha-ratio.tab', format='ascii.tab')
-# \[2/3\]\ Program\ owl-slit-calibrate\.py:1 ends here
+# \[2/3\]\ Program\ owl-slit-calibrate\.py:2 ends here

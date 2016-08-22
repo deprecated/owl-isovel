@@ -38,7 +38,7 @@ for row in table:
     ny, nx = image.shape
     hdu.header.remove('@EPOCH')
     w = WCS(hdu.header)
-    # Create world coord arrays for output image
+    # Create world coord arrays for input image
     ii, jj = np.meshgrid(np.arange(nx), np.arange(ny))
     ra, dec = w.all_pix2world(ii, jj, 0)
     # Do the interpolation
