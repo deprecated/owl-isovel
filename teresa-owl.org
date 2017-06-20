@@ -109,14 +109,76 @@ Original wavelengths are in topocentric frame
 |--------+-------------+---------+-------------|
 |        |             |         | 2.6 +/- 0.2 |
 #+TBLFM: $3=3e5 ($-1 - 6583.45)/6583.45 ;f2::$4=$-1 - 19.75; f2::@7$4=vmeane(@-3..@-1);f1
+* Sending isovel images to Tere
+#+BEGIN_SRC sh :results verbatim
+zip Tere-Isovel-Images.zip owl-dslits-*-multibin.fits
+#+END_SRC
 
+#+RESULTS:
+#+begin_example
+  adding: owl-dslits-ha+000+010-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha+010+020-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha+020+030-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha+030+040-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha+040+050-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha+050+060-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha+060+070-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha-010+000-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha-020-010-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha-030-020-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha-040-030-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha-050-040-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha-060-050-multibin.fits (deflated 75%)
+  adding: owl-dslits-ha-allvels-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii+000+010-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii+010+020-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii+020+030-multibin.fits (deflated 78%)
+  adding: owl-dslits-nii+030+040-multibin.fits (deflated 78%)
+  adding: owl-dslits-nii+040+050-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii+050+060-multibin.fits (deflated 79%)
+  adding: owl-dslits-nii+060+070-multibin.fits (deflated 79%)
+  adding: owl-dslits-nii-010+000-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii-020-010-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii-030-020-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii-040-030-multibin.fits (deflated 75%)
+  adding: owl-dslits-nii-050-040-multibin.fits (deflated 79%)
+  adding: owl-dslits-nii-060-050-multibin.fits (deflated 80%)
+  adding: owl-dslits-nii-allvels-multibin.fits (deflated 76%)
+#+end_example
 
+* Figure caption for figure 5
+#+BEGIN_SRC latex
+  Synthetic isovelocity channel maps shown as false color images, each
+  with 10~\kms{} width, which have been reconstructed from the longslit
+  spectra in \ha{} (above) and \nii{} (below).  Each channel is labeled
+  with its central heliocentric velocity. The channel closest to the
+  systemic velocity is shown on the right, while increasingly
+  blueshifted (upper row) and redshifted (lower row) channels are
+  arranged to the left.  Some notable features in the channel maps are
+  indicated by colored ellipses: dashed lines for holes, solid lines for
+  bright knots.  The top rows of grayscale images illustrate the
+  multibinning method that we use to reconstruct the maps.  The top left
+  panel shows the full-resolution map of the slit brightness profiles on
+  the sky, which shows large gaps in between the slit positions.  We
+  then repeatedly rebin the map to a \(2 \times\) coarser resolution to
+  produce degraded maps at \(2 \times 2\), \(4 \times 4\),
+  \(8 \times 8\), \(16 \times 16\), \(32 \times 32\), and
+  \(64 \times 64\), where only every second map is illustrated.  This process
+  incrementally ``fills in'' the gaps between the slits.  All the maps
+  are then stacked to produce the final reconstructed image, with the
+  finest resolution map on top but with those pixels containing no data
+  set to transparent so that the coarser resolution maps will show
+  through.  Results for the integrated line profiles are shown in the
+  second row, which can be compared with a direct image in the sum of
+  the \ha{} and \nii{} lines on the left.
 
-* TODO Making the final figures
+#+END_SRC
+* DONE Making the final figures
+CLOSED: [2017-06-20 Tue 10:46]
 + Use Aplpy to do isovel panels
   + grayscale or viridis?
   + grid layout?
-    + We have 13 channels and 2 lines
+    * We have 13 channels and 2 lines
 ** owl-isovel-figs.py
 #+BEGIN_SRC python :tangle owl-isovel-figs.py
   from astropy.io import fits
@@ -168,15 +230,18 @@ python owl-isovel-figs.py
 
 #+RESULTS:
 [[file:owl-isovel-figs.png]]
-** TODO [4/6] Fancy layout for the figure
+** DONE [7/7] Fancy layout for the figure
+CLOSED: [2017-06-20 Tue 10:46]
 + This is the same as the previous, but incorporates the layout that I tried out in [[file:owl-isovel-fig-layout.idraw]]
 + [X] Sort out the placement of sub-elements
 + [X] Add the four allvels pics at the top
 + [X] Add the cross for the star
-+ [-] Add the regions
++ [X] Add the regions
   + Do this in Graphic.app would be easiest
 + [X] Make it color - viridis color map
-+ [-] Add labels in Graphic.app
++ [X] Add labels in Graphic.app
++ [X] Add stages in the binning
+  + Final version: [[file:owl-isovel-fig-layout-new.pdf]]
 
 #+BEGIN_SRC python :tangle owl-isovel-fancy.py :eval no
   from astropy.io import fits
@@ -193,15 +258,16 @@ python owl-isovel-figs.py
       return '{:+04d}{:+04d}'.format(int(v1), int(v2))
 
   # Layout dimensions, all in inches
-  paper_size = 11, 8.5
-  margin = 0.3
+  paper_size = 11, 11
+  margin = 0.5
   stamp_size = 1.4  # inches
 
   # Origin of each of the three major sections of the figure
   origin = {
       'nii': (margin, margin),
       'ha': (margin, margin + 2*stamp_size + margin),
-      'allvels': (margin + 0.75*stamp_size, paper_size[1] - margin - stamp_size),
+      'allvels': (margin + 0.75*stamp_size,
+                  paper_size[1] - 2*margin - 2*stamp_size),
   }
   # (x, y) offsets for the V channels in units of stamp_size
   snake = {
@@ -255,36 +321,41 @@ python owl-isovel-figs.py
   # And the four all-vels images across the top
   #
 
-  for i, [fn, vmax, ihdu] in enumerate(
-          [['imslit-median-sub', 1.5, 0],
-           ['owl-slits-ha-allvels', 0.85, 3],
-           ['owl-dslits-ha-allvels-multibin', 1.0, 0],
-           ['owl-dslits-nii-allvels-multibin', 0.4, 0],
-           ['imslit-median-sub', 1.5, 0]]
-  ):
-      x0 = origin['allvels'][0] + i*(5./4.)*stamp_size
-      y0 = origin['allvels'][1]
-      window = [x0/paper_size[0], y0/paper_size[1],
-                stamp_size/paper_size[0], stamp_size/paper_size[1]]
-      fitsfile = fn  + '.fits'
-      f = aplpy.FITSFigure(fitsfile, figure=fig, subplot=window, hdu=ihdu)
-      f.show_grayscale(vmin=0.0, vmax=vmax, invert=True, interpolation='none')
-      f.ticks.set_color('gray')
-      if i > 0:
-          f.hide_axis_labels()
-          f.hide_tick_labels()
-      else:
-          f.axis_labels.set_font(size='x-small')
-          f.tick_labels.set_font(size='x-small')
-          f.tick_labels.set_xformat('hh:mm:ss.s')
-          f.tick_labels.set_yformat('dd:mm:ss.s')
-          f.tick_labels.set_style('colons')
-      f.ticks.set_xspacing(ra_tick_spacing)
-      f.ticks.set_yspacing(dec_tick_spacing)
-      f.show_markers([xstar], [ystar], marker='*')
+  rowA = [['imslit-median-sub', 1.5, 0],
+          ['owl-dslits-ha-allvels-multibin', 1.0, 0],
+          ['owl-dslits-nii-allvels-multibin', 0.4, 0],
+          ['imslit-median-sub', 1.5, 0]]
+
+  rowB = [['owl-slits-ha-allvels', 0.85, 3],
+          ['owl-dslits-ha-allvels-bin004', 1.0, 0],
+          ['owl-dslits-ha-allvels-bin016', 1.0, 0],
+          ['owl-dslits-ha-allvels-bin064', 1.0, 0]]
+
+  for j, row in enumerate([rowA, rowB]):
+      for i, [fn, vmax, ihdu] in enumerate(row):
+          x0 = origin['allvels'][0] + i*(5./4.)*stamp_size
+          y0 = origin['allvels'][1] + j*1.4*stamp_size
+          window = [x0/paper_size[0], y0/paper_size[1],
+                    stamp_size/paper_size[0], stamp_size/paper_size[1]]
+          fitsfile = fn  + '.fits'
+          f = aplpy.FITSFigure(fitsfile, figure=fig, subplot=window, hdu=ihdu)
+          f.show_grayscale(vmin=0.0, vmax=vmax, invert=True, interpolation='none')
+          f.ticks.set_color('gray')
+          if i > 0 or j > 0:
+              f.hide_axis_labels()
+              f.hide_tick_labels()
+          else:
+              f.axis_labels.set_font(size='x-small')
+              f.tick_labels.set_font(size='x-small')
+              f.tick_labels.set_xformat('hh:mm:ss.s')
+              f.tick_labels.set_yformat('dd:mm:ss.s')
+              f.tick_labels.set_style('colons')
+          f.ticks.set_xspacing(ra_tick_spacing)
+          f.ticks.set_yspacing(dec_tick_spacing)
+          f.show_markers([xstar], [ystar], marker='*')
 
   fig.savefig(figfile, dpi=150)
-  print(figfile)
+  print(figfile, end='')
 
 
 #+END_SRC
@@ -295,6 +366,7 @@ python owl-isovel-fancy.py
 
 #+RESULTS:
 [[file:owl-isovel-fancy.png]]
+
 
 * Utility functions
 :PROPERTIES:
@@ -543,9 +615,6 @@ def make_slit_wcs(db, slit_coords, spechdu):
       bgdata = np.zeros_like(data)
       bgdata += bg[:, None]
       return data - bgdata, bgdata
-
-
-
 #+END_SRC
 
 * DONE Make the median image
@@ -1640,6 +1709,95 @@ CLOSED: [2016-08-19 Fri 11:19]
   + CANCELLED - not necessary
 + [X] Finesse the flux calibration of slits 04 and 07
   + Although they aren't the ones that look particularly bad
+** TODO Write PV spectra with WCS in arcsec relative to star
+#+BEGIN_SRC python :tangle owl-pv-relative.py
+  import glob
+  import sys
+  import numpy as np
+  from astropy.io import fits
+  from astropy.wcs import WCS
+  from astropy.wcs.utils import pixel_to_skycoord, skycoord_to_pixel
+  import astropy.units as u
+  sys.path.append('/Users/will/Dropbox/OrionWest')
+  from helio_utils import helio_topo_from_header, waves2vels
+
+
+  speclist = glob.glob('Calibrated/*-*.fits')
+  # Center on central star of NGC 3587
+  RA0, Dec0 = 168.6985, 55.019408
+
+  for fn in speclist:
+      print('Processing', fn)
+      spechdu, = fits.open(fn)
+      wspec = WCS(spechdu.header, key='A')
+
+      # Eliminate degenerate 3rd dimension from data array and trim off bad bits
+      spec2d = spechdu.data[0]
+
+      # Rest wavelengths in m
+      if '-nii' in fn:
+          wav0 = 6583.45*1e-10
+      elif '-ha' in fn:
+          wav0 = 6562.79*1e-10
+      else:
+          raise NotImplementedError('Only Ha and [N II] so far')
+
+      # Convert to heliocentric velocity
+      [[wav1, _, _], [wav2, _, _]] = wspec.all_pix2world([[0, 0, 0], [1, 0, 0]], 0)
+      [v1, v2] = waves2vels(np.array([wav1, wav2]), wav0, spechdu.header)
+
+      # Find RA and declination offset
+      [[_, i0, j0]] = wspec.all_world2pix([[6563.0, RA0, Dec0]], 0)
+      [[_, RA1, Dec1]] = wspec.all_pix2world([[0, i0, 0]], 0)
+
+      wnew = WCS(naxis=2)
+      wnew.wcs.ctype = ['VHEL', 'LINEAR']
+      wnew.wcs.crpix = [1, i0+1]
+      wnew.wcs.cunit = ['km/s', 'arcsec']
+      wnew.wcs.crval = [v1.to('km/s').value, 3600*(RA1 - RA0)]
+      wnew.wcs.cdelt = [(v2 - v1).to('km/s').value,
+                        3600*wspec.wcs.cdelt[1]*wspec.wcs.pc[1,1]]
+
+      decoffset =  3600*(Dec1 - Dec0)
+      decstring = '-y{:+04d}'.format(int(decoffset))
+      newhdr = wnew.to_header()
+      new_fn = fn.replace('Calibrated/', 'Offset/')
+      new_fn = new_fn.replace('.fits', decstring + '.fits')
+      fits.PrimaryHDU(data=spec2d, header=newhdr).writeto(new_fn, clobber=True)
+    
+#+END_SRC
+
+#+BEGIN_SRC sh :results verbatim
+python owl-pv-relative.py
+#+END_SRC
+
+#+RESULTS:
+#+begin_example
+Processing Calibrated/pos01-ha.fits
+Processing Calibrated/pos01-nii.fits
+Processing Calibrated/pos02-ha.fits
+Processing Calibrated/pos02-nii.fits
+Processing Calibrated/pos03-ha.fits
+Processing Calibrated/pos03-nii.fits
+Processing Calibrated/pos04-ha.fits
+Processing Calibrated/pos04-nii.fits
+Processing Calibrated/pos05-ha.fits
+Processing Calibrated/pos05-nii.fits
+Processing Calibrated/pos06-ha.fits
+Processing Calibrated/pos06-nii.fits
+Processing Calibrated/pos07-ha.fits
+Processing Calibrated/pos07-nii.fits
+Processing Calibrated/pos08-ha.fits
+Processing Calibrated/pos08-nii.fits
+Processing Calibrated/pos09-ha.fits
+Processing Calibrated/pos09-nii.fits
+Processing Calibrated/pos10-ha.fits
+Processing Calibrated/pos10-nii.fits
+Processing Calibrated/pos11-ha.fits
+Processing Calibrated/pos11-nii.fits
+Processing Calibrated/pos12-ha.fits
+Processing Calibrated/pos12-nii.fits
+#+end_example
 
 ** DONE Construct spectral maps
 CLOSED: [2016-08-16 Tue 23:23]
@@ -1715,7 +1873,7 @@ CLOSED: [2016-08-16 Tue 23:23]
 
       # Eliminate degenerate 3rd dimension from data array and trim off bad bits
       spec2d = spechdu.data[0]
-
+      
       # Rest wavelength from FITS header is in meters
       wavrest = wspec.wcs.restwav*u.m
 
@@ -2202,3 +2360,4 @@ xpaset -p ds9 frame next
   + lam0 :: 6557
   + lamscale :: 0.043752133
   + d vel :: 2
+             

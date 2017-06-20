@@ -12,15 +12,16 @@ def chan2vrange(ichan, v0=5.0, dv=10.0):
     return '{:+04d}{:+04d}'.format(int(v1), int(v2))
 
 # Layout dimensions, all in inches
-paper_size = 11, 8.5
-margin = 0.3
+paper_size = 11, 11
+margin = 0.5
 stamp_size = 1.4  # inches
 
 # Origin of each of the three major sections of the figure
 origin = {
     'nii': (margin, margin),
     'ha': (margin, margin + 2*stamp_size + margin),
-    'allvels': (margin + 0.75*stamp_size, paper_size[1] - margin - stamp_size),
+    'allvels': (margin + 0.75*stamp_size,
+                paper_size[1] - 2*margin - 2*stamp_size),
 }
 # (x, y) offsets for the V channels in units of stamp_size
 snake = {
@@ -74,33 +75,38 @@ for lineid in ['ha', 'nii']:
 # And the four all-vels images across the top
 #
 
-for i, [fn, vmax, ihdu] in enumerate(
-        [['imslit-median-sub', 1.5, 0],
-         ['owl-slits-ha-allvels', 0.85, 3],
-         ['owl-dslits-ha-allvels-multibin', 1.0, 0],
-         ['owl-dslits-nii-allvels-multibin', 0.4, 0],
-         ['imslit-median-sub', 1.5, 0]]
-):
-    x0 = origin['allvels'][0] + i*(5./4.)*stamp_size
-    y0 = origin['allvels'][1]
-    window = [x0/paper_size[0], y0/paper_size[1],
-              stamp_size/paper_size[0], stamp_size/paper_size[1]]
-    fitsfile = fn  + '.fits'
-    f = aplpy.FITSFigure(fitsfile, figure=fig, subplot=window, hdu=ihdu)
-    f.show_grayscale(vmin=0.0, vmax=vmax, invert=True, interpolation='none')
-    f.ticks.set_color('gray')
-    if i > 0:
-        f.hide_axis_labels()
-        f.hide_tick_labels()
-    else:
-        f.axis_labels.set_font(size='x-small')
-        f.tick_labels.set_font(size='x-small')
-        f.tick_labels.set_xformat('hh:mm:ss.s')
-        f.tick_labels.set_yformat('dd:mm:ss.s')
-        f.tick_labels.set_style('colons')
-    f.ticks.set_xspacing(ra_tick_spacing)
-    f.ticks.set_yspacing(dec_tick_spacing)
-    f.show_markers([xstar], [ystar], marker='*')
+rowA = [['imslit-median-sub', 1.5, 0],
+        ['owl-dslits-ha-allvels-multibin', 1.0, 0],
+        ['owl-dslits-nii-allvels-multibin', 0.4, 0],
+        ['imslit-median-sub', 1.5, 0]]
+
+rowB = [['owl-slits-ha-allvels', 0.85, 3],
+        ['owl-dslits-ha-allvels-bin004', 1.0, 0],
+        ['owl-dslits-ha-allvels-bin016', 1.0, 0],
+        ['owl-dslits-ha-allvels-bin064', 1.0, 0]]
+
+for j, row in enumerate([rowA, rowB]):
+    for i, [fn, vmax, ihdu] in enumerate(row):
+        x0 = origin['allvels'][0] + i*(5./4.)*stamp_size
+        y0 = origin['allvels'][1] + j*1.4*stamp_size
+        window = [x0/paper_size[0], y0/paper_size[1],
+                  stamp_size/paper_size[0], stamp_size/paper_size[1]]
+        fitsfile = fn  + '.fits'
+        f = aplpy.FITSFigure(fitsfile, figure=fig, subplot=window, hdu=ihdu)
+        f.show_grayscale(vmin=0.0, vmax=vmax, invert=True, interpolation='none')
+        f.ticks.set_color('gray')
+        if i > 0 or j > 0:
+            f.hide_axis_labels()
+            f.hide_tick_labels()
+        else:
+            f.axis_labels.set_font(size='x-small')
+            f.tick_labels.set_font(size='x-small')
+            f.tick_labels.set_xformat('hh:mm:ss.s')
+            f.tick_labels.set_yformat('dd:mm:ss.s')
+            f.tick_labels.set_style('colons')
+        f.ticks.set_xspacing(ra_tick_spacing)
+        f.ticks.set_yspacing(dec_tick_spacing)
+        f.show_markers([xstar], [ystar], marker='*')
 
 fig.savefig(figfile, dpi=150)
-print(figfile)
+print(figfile, end='')
